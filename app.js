@@ -51,11 +51,6 @@ let selectedSample = "03";
 let isPlaying = false;
 let isDemoLoaded = false;
 let timer;
-let longPressTimer;
-let notePressTimer;
-let playPressTimer;
-let suppressNoteClick = false;
-let suppressPlayClick = false;
 let patternTouchStartY = 0;
 let patternTouchLastY = 0;
 let cellPressTimer;
@@ -515,28 +510,6 @@ sampleRack.addEventListener("click", (event) => {
   playCell(`${sampleVoices[selectedSample].preview} ${selectedSample} 000`);
 });
 
-noteRow.addEventListener("pointerdown", (event) => {
-  const button = event.target.closest("button");
-  if (!button) return;
-
-  suppressNoteClick = false;
-  clearTimeout(notePressTimer);
-  if (button.dataset.sharp) {
-    notePressTimer = setTimeout(() => {
-      suppressNoteClick = true;
-      insertNote(button.dataset.sharp);
-    }, 330);
-  }
-});
-
-noteRow.addEventListener("pointerup", () => {
-  clearTimeout(notePressTimer);
-});
-
-noteRow.addEventListener("pointerleave", () => {
-  clearTimeout(notePressTimer);
-});
-
 noteRow.addEventListener("contextmenu", (event) => {
   event.preventDefault();
 });
@@ -544,11 +517,6 @@ noteRow.addEventListener("contextmenu", (event) => {
 noteRow.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
-
-  if (suppressNoteClick) {
-    suppressNoteClick = false;
-    return;
-  }
 
   insertNote(button.dataset.note);
 });
@@ -622,18 +590,6 @@ demoButton.addEventListener("click", () => {
   }
 });
 
-bpmTile.addEventListener("pointerdown", () => {
-  longPressTimer = setTimeout(showTempoPanel, 360);
-});
-
-bpmTile.addEventListener("pointerup", () => {
-  clearTimeout(longPressTimer);
-});
-
-bpmTile.addEventListener("pointerleave", () => {
-  clearTimeout(longPressTimer);
-});
-
 bpmTile.addEventListener("click", showTempoPanel);
 
 bpmSlider.addEventListener("input", (event) => {
@@ -644,29 +600,7 @@ bpmDown.addEventListener("click", () => setBpm(bpm - 1));
 bpmUp.addEventListener("click", () => setBpm(bpm + 1));
 tempoDone.addEventListener("click", hideTempoPanel);
 
-playButton.addEventListener("pointerdown", () => {
-  suppressPlayClick = false;
-  clearTimeout(playPressTimer);
-  playPressTimer = setTimeout(() => {
-    suppressPlayClick = true;
-    startPlayback(true);
-  }, 420);
-});
-
-playButton.addEventListener("pointerup", () => {
-  clearTimeout(playPressTimer);
-});
-
-playButton.addEventListener("pointerleave", () => {
-  clearTimeout(playPressTimer);
-});
-
 playButton.addEventListener("click", () => {
-  if (suppressPlayClick) {
-    suppressPlayClick = false;
-    return;
-  }
-
   if (isPlaying) {
     stopPlayback();
   } else {

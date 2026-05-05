@@ -36,6 +36,9 @@ button {
   border: 0;
   font: inherit;
   color: inherit;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 [hidden] {
@@ -167,6 +170,8 @@ h2 {
   min-width: 0;
   padding: 6px 4px;
   overflow: hidden;
+  display: grid;
+  align-items: center;
   text-align: center;
   white-space: nowrap;
 }
@@ -183,6 +188,7 @@ h2 {
   border-bottom: 1px solid rgba(255, 255, 255, 0.045);
   color: #c9d3cf;
   font-size: 12px;
+  line-height: 1.25;
   min-height: 0;
 }
 
@@ -207,6 +213,9 @@ h2 {
 .pattern-cell {
   cursor: pointer;
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .pattern-cell.selected {
@@ -452,6 +461,8 @@ h2 {
   place-items: center;
   font-size: 15px;
   touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 
