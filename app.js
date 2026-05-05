@@ -5,8 +5,6 @@ const bpmReadout = document.querySelector("#bpmReadout");
 const channelReadout = document.querySelector("#channelReadout");
 const octaveReadout = document.querySelector("#octaveReadout");
 const sampleDeck = document.querySelector(".sample-deck");
-const sampleName = document.querySelector("#sampleName");
-const sampleCode = document.querySelector("#sampleCode");
 const editorNoteGrid = document.querySelector("#editorNoteGrid");
 const volumeSlider = document.querySelector("#volumeSlider");
 const volumeReadout = document.querySelector("#volumeReadout");
@@ -432,8 +430,6 @@ function syncReadouts() {
   octaveReadout.textContent = octave.toString().padStart(2, "0");
   volumeSlider.value = selectedVolume.toString();
   volumeReadout.textContent = selectedVolume.toString().padStart(2, "0");
-  sampleName.textContent = `${selectedSample} ${sampleVoices[selectedSample].name}`;
-  sampleCode.textContent = selectedSample;
   document.querySelectorAll(".sample-pad").forEach((item) => item.classList.remove("active"));
   document.querySelector(`.sample-pad[data-code="${selectedSample}"]`)?.classList.add("active");
   document.querySelectorAll(".piano-keyboard button").forEach((item) => {
@@ -466,8 +462,6 @@ function updateActiveCellSample(sample) {
 
 function selectSample(sample) {
   selectedSample = sample;
-  sampleName.textContent = `${sample} ${sampleVoices[sample].name}`;
-  sampleCode.textContent = sample;
   syncReadouts();
 }
 
