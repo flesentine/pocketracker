@@ -604,7 +604,7 @@ playButton.addEventListener("click", () => {
   if (isPlaying) {
     stopPlayback();
   } else {
-    startPlayback(false);
+    startPlayback(true);
   }
 });
 
