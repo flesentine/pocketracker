@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pocket Tracker</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="phone-shell" aria-label="Pocket tracker prototype">
+      <header class="top-bar">
+        <button class="icon-button" aria-label="Open menu">PT</button>
+        <div>
+          <p class="eyebrow">Pattern 04</p>
+          <h1>Pocket Tracker</h1>
+        </div>
+        <button class="icon-button" id="demoButton" aria-label="Load demo song">Demo</button>
+      </header>
+
+      <section class="status-strip" aria-label="Playback status">
+        <button class="status-button" id="bpmTile" aria-label="Open tempo control">
+          <span>BPM</span>
+          <strong id="bpmReadout">126</strong>
+        </button>
+        <div>
+          <span>CH</span>
+          <strong id="channelReadout">01</strong>
+        </div>
+        <div>
+          <span>ROW</span>
+          <strong id="rowReadout">08</strong>
+        </div>
+        <div>
+          <span>OCT</span>
+          <strong id="octaveReadout">03</strong>
+        </div>
+      </section>
+
+      <section class="pattern-panel" aria-label="Pattern editor">
+        <div class="channel-head">
+          <span></span>
+          <span>CH 1</span>
+          <span>CH 2</span>
+          <span>CH 3</span>
+          <span>CH 4</span>
+        </div>
+        <div class="pattern-grid" id="patternGrid"></div>
+      </section>
+
+      <section class="sample-deck" aria-label="Selected sample">
+        <div class="sample-meta">
+          <div>
+            <p class="eyebrow">Selected Sample</p>
+            <h2 id="sampleName">03 Bassline</h2>
+          </div>
+          <span class="pill" id="sampleCode">03</span>
+        </div>
+        <div class="waveform" aria-hidden="true">
+          <span style="height: 32%"></span>
+          <span style="height: 56%"></span>
+          <span style="height: 78%"></span>
+          <span style="height: 42%"></span>
+          <span style="height: 64%"></span>
+          <span style="height: 88%"></span>
+          <span style="height: 51%"></span>
+          <span style="height: 28%"></span>
+          <span style="height: 70%"></span>
+          <span style="height: 94%"></span>
+          <span style="height: 62%"></span>
+          <span style="height: 38%"></span>
+          <span style="height: 74%"></span>
+          <span style="height: 46%"></span>
+          <span style="height: 84%"></span>
+          <span style="height: 30%"></span>
+        </div>
+        <div class="sample-rack" id="sampleRack" aria-label="Sample rack">
+          <button class="sample-pad" data-code="01" data-name="01 Kick">01<br />Kick</button>
+          <button class="sample-pad" data-code="02" data-name="02 Snare">02<br />Snare</button>
+          <button class="sample-pad active" data-code="03" data-name="03 Bassline">03<br />Bass</button>
+          <button class="sample-pad" data-code="04" data-name="04 Lead">04<br />Lead</button>
+        </div>
+      </section>
+
+      <section class="thumb-deck" aria-label="Note entry controls">
+        <div class="tempo-panel" id="tempoPanel" hidden>
+          <button class="tempo-step" id="bpmDown" aria-label="Decrease BPM">-</button>
+          <label class="tempo-slider">
+            <span>Tempo</span>
+            <input id="bpmSlider" type="range" min="80" max="180" value="126" />
+          </label>
+          <button class="tempo-step" id="bpmUp" aria-label="Increase BPM">+</button>
+          <button class="tempo-done" id="tempoDone">Done</button>
+        </div>
+        <div class="cell-editor" aria-label="Selected cell editor">
+          <button class="nudge-button" id="rowPrev" aria-label="Previous row">R-</button>
+          <button class="nudge-button" id="channelPrev" aria-label="Previous channel">C-</button>
+          <div class="cell-readout">
+            <span id="cellPosition">08 / CH 01</span>
+            <strong id="cellValue">--- .. ...</strong>
+          </div>
+          <button class="nudge-button" id="channelNext" aria-label="Next channel">C+</button>
+          <button class="nudge-button" id="rowNext" aria-label="Next row">R+</button>
+        </div>
+        <div class="edit-actions">
+          <button id="previewCell">Preview</button>
+          <button id="clearCell">Clear</button>
+        </div>
+        <div class="note-row" id="noteRow">
+          <button data-note="C" data-sharp="C#">C<small>#</small></button>
+          <button data-note="D" data-sharp="D#">D<small>#</small></button>
+          <button data-note="E">E</button>
+          <button data-note="F" data-sharp="F#">F<small>#</small></button>
+          <button data-note="G" data-sharp="G#">G<small>#</small></button>
+          <button data-note="A" data-sharp="A#">A<small>#</small></button>
+          <button data-note="B">B</button>
+        </div>
+        <div class="transport">
+          <button class="secondary" id="octaveDown">OCT -</button>
+          <button class="play" id="playButton">Play</button>
+          <button class="secondary" id="octaveUp">OCT +</button>
+        </div>
+      </section>
+      <div class="note-popover" id="notePopover" hidden>
+        <div class="note-popover-head">
+          <span id="notePopoverCell">00 / CH 01</span>
+          <button id="notePopoverClose" aria-label="Close note picker">x</button>
+        </div>
+        <div class="note-popover-grid" id="notePopoverGrid"></div>
+      </div>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
