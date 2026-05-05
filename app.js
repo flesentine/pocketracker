@@ -7,7 +7,10 @@ const octaveReadout = document.querySelector("#octaveReadout");
 const sampleRack = document.querySelector("#sampleRack");
 const sampleName = document.querySelector("#sampleName");
 const sampleCode = document.querySelector("#sampleCode");
-const noteRow = document.querySelector("#noteRow");
+const editorNoteGrid = document.querySelector("#editorNoteGrid");
+const editorSampleGrid = document.querySelector("#editorSampleGrid");
+const volumeSlider = document.querySelector("#volumeSlider");
+const volumeReadout = document.querySelector("#volumeReadout");
 const playButton = document.querySelector("#playButton");
 const octaveDown = document.querySelector("#octaveDown");
 const octaveUp = document.querySelector("#octaveUp");
@@ -26,10 +29,6 @@ const bpmSlider = document.querySelector("#bpmSlider");
 const bpmDown = document.querySelector("#bpmDown");
 const bpmUp = document.querySelector("#bpmUp");
 const tempoDone = document.querySelector("#tempoDone");
-const notePopover = document.querySelector("#notePopover");
-const notePopoverCell = document.querySelector("#notePopoverCell");
-const notePopoverGrid = document.querySelector("#notePopoverGrid");
-const notePopoverClose = document.querySelector("#notePopoverClose");
 
 const sampleVoices = {
   "01": { name: "Kick", preview: "C-2", wave: [88, 64, 42, 24, 14, 9, 7, 5, 4, 3, 3, 2, 2, 2, 2, 2] },
@@ -41,7 +40,7 @@ const sampleVoices = {
 const emptyCell = "--- .. ...";
 const pattern = Array.from({ length: 64 }, () => Array(4).fill(emptyCell));
 const visiblePatternRows = 18;
-const pickerNotes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const defaultVolume = 48;
 
 let activeRow = 8;
 let activeChannel = 0;
@@ -53,13 +52,25 @@ let isDemoLoaded = false;
 let timer;
 let patternTouchStartY = 0;
 let patternTouchLastY = 0;
-let cellPressTimer;
-let suppressCellClick = false;
+let patternDidSwipe = false;
+let selectedVolume = defaultVolume;
 let audioContext;
 let noiseBuffer;
 
 function formatRow(row) {
   return row.toString().padStart(2, "0");
+}
+
+function formatVolume(volume) {
+  return `V${Math.round(volume).toString().padStart(2, "0")}`;
+}
+
+function volumeToGain(volume) {
+  return Math.max(0, Math.min(64, Number(volume))) / 64;
+}
+
+function makeCell(note, sample = selectedSample, volume = selectedVolume) {
+  return `${note} ${sample} ${formatVolume(volume)}`;
 }
 
 function getAudioContext() {
@@ -110,14 +121,15 @@ function noteToFrequency(note) {
   return 440 * 2 ** ((semitones[`${letter}${accidental}`] + (Number(octaveValue) - 4) * 12) / 12);
 }
 
-function playKick(ctx, when) {
+function playKick(ctx, when, volume = defaultVolume) {
+  const level = volumeToGain(volume);
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
 
   osc.type = "sine";
   osc.frequency.setValueAtTime(132, when);
   osc.frequency.exponentialRampToValueAtTime(42, when + 0.18);
-  gain.gain.setValueAtTime(0.95, when);
+  gain.gain.setValueAtTime(0.95 * level, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + 0.24);
 
   osc.connect(gain);
@@ -126,7 +138,8 @@ function playKick(ctx, when) {
   osc.stop(when + 0.26);
 }
 
-function playSnare(ctx, when) {
+function playSnare(ctx, when, volume = defaultVolume) {
+  const level = volumeToGain(volume);
   const noise = ctx.createBufferSource();
   const filter = ctx.createBiquadFilter();
   const gain = ctx.createGain();
@@ -137,12 +150,12 @@ function playSnare(ctx, when) {
   filter.type = "bandpass";
   filter.frequency.setValueAtTime(1800, when);
   filter.Q.value = 0.9;
-  gain.gain.setValueAtTime(0.5, when);
+  gain.gain.setValueAtTime(0.5 * level, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + 0.16);
 
   snap.type = "triangle";
   snap.frequency.setValueAtTime(185, when);
-  snapGain.gain.setValueAtTime(0.22, when);
+  snapGain.gain.setValueAtTime(0.22 * level, when);
   snapGain.gain.exponentialRampToValueAtTime(0.001, when + 0.08);
 
   noise.connect(filter);
@@ -156,7 +169,8 @@ function playSnare(ctx, when) {
   snap.stop(when + 0.09);
 }
 
-function playBass(ctx, note, when) {
+function playBass(ctx, note, when, volume = defaultVolume) {
+  const level = volumeToGain(volume);
   const frequency = noteToFrequency(note);
   const saw = ctx.createOscillator();
   const sub = ctx.createOscillator();
@@ -182,7 +196,7 @@ function playBass(ctx, note, when) {
   drive.curve = curve;
   drive.oversample = "2x";
   gain.gain.setValueAtTime(0.001, when);
-  gain.gain.exponentialRampToValueAtTime(0.24, when + 0.018);
+  gain.gain.exponentialRampToValueAtTime(0.24 * level, when + 0.018);
   gain.gain.exponentialRampToValueAtTime(0.001, when + 0.38);
 
   saw.connect(filter);
@@ -196,7 +210,8 @@ function playBass(ctx, note, when) {
   sub.stop(when + 0.42);
 }
 
-function playTone(ctx, note, sample, when) {
+function playTone(ctx, note, sample, when, volume = defaultVolume) {
+  const level = volumeToGain(volume);
   const frequency = noteToFrequency(note);
   const osc = ctx.createOscillator();
   const filter = ctx.createBiquadFilter();
@@ -210,7 +225,7 @@ function playTone(ctx, note, sample, when) {
   filter.frequency.setValueAtTime(isLead ? 2600 : 720, when);
   filter.frequency.exponentialRampToValueAtTime(isLead ? 1800 : 360, when + 0.28);
   gain.gain.setValueAtTime(0.001, when);
-  gain.gain.exponentialRampToValueAtTime(isLead ? 0.2 : 0.28, when + 0.015);
+  gain.gain.exponentialRampToValueAtTime((isLead ? 0.2 : 0.28) * level, when + 0.015);
   gain.gain.exponentialRampToValueAtTime(0.001, when + (isLead ? 0.42 : 0.3));
 
   osc.connect(filter);
@@ -221,9 +236,13 @@ function playTone(ctx, note, sample, when) {
 }
 
 function parseCell(cell) {
-  const [note, sample] = cell.split(/\s+/);
+  const [note, sample, volumeToken] = cell.split(/\s+/);
   if (!note || note === "---") return null;
-  return { note, sample };
+  const parsedVolume = volumeToken?.startsWith("V")
+    ? Number(volumeToken.slice(1))
+    : Number(volumeToken);
+  const volume = Number.isFinite(parsedVolume) ? parsedVolume : defaultVolume;
+  return { note, sample, volume };
 }
 
 function playCell(cell, when = getAudioContext().currentTime) {
@@ -232,13 +251,13 @@ function playCell(cell, when = getAudioContext().currentTime) {
 
   const ctx = getAudioContext();
   if (parsed.sample === "01") {
-    playKick(ctx, when);
+    playKick(ctx, when, parsed.volume);
   } else if (parsed.sample === "02") {
-    playSnare(ctx, when);
+    playSnare(ctx, when, parsed.volume);
   } else if (parsed.sample === "03") {
-    playBass(ctx, parsed.note, when);
+    playBass(ctx, parsed.note, when, parsed.volume);
   } else {
-    playTone(ctx, parsed.note, parsed.sample, when);
+    playTone(ctx, parsed.note, parsed.sample, when, parsed.volume);
   }
 }
 
@@ -314,30 +333,9 @@ function renderPattern() {
       span.dataset.channel = channel;
       span.dataset.row = row;
       span.textContent = cell;
-      span.addEventListener("pointerdown", (event) => {
-        suppressCellClick = false;
-        clearTimeout(cellPressTimer);
-        cellPressTimer = setTimeout(() => {
-          suppressCellClick = true;
-          activeRow = row;
-          activeChannel = channel;
-          syncReadouts();
-          renderPattern();
-          showNotePopover(event.clientX, event.clientY);
-        }, 420);
-      });
-      span.addEventListener("pointerup", () => {
-        clearTimeout(cellPressTimer);
-      });
-      span.addEventListener("pointerleave", () => {
-        clearTimeout(cellPressTimer);
-      });
       span.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (suppressCellClick) {
-          suppressCellClick = false;
-          return;
-        }
+        if (patternDidSwipe) return;
         activeRow = row;
         activeChannel = channel;
         playCell(pattern[row][channel]);
@@ -348,6 +346,7 @@ function renderPattern() {
     });
 
     rowEl.addEventListener("click", () => {
+      if (patternDidSwipe) return;
       activeRow = row;
       syncReadouts();
       renderPattern();
@@ -364,69 +363,57 @@ function moveRows(delta) {
 }
 
 function syncReadouts() {
+  const parsed = parseCell(pattern[activeRow][activeChannel]);
+  if (parsed) {
+    selectedSample = parsed.sample;
+    selectedVolume = parsed.volume;
+  }
+
   bpmReadout.textContent = bpm.toString();
   bpmSlider.value = bpm.toString();
   rowReadout.textContent = formatRow(activeRow);
   channelReadout.textContent = (activeChannel + 1).toString().padStart(2, "0");
   octaveReadout.textContent = octave.toString().padStart(2, "0");
-  cellPosition.textContent = `${rowReadout.textContent} / CH ${channelReadout.textContent}`;
-  cellValue.textContent = pattern[activeRow][activeChannel];
-}
-
-function insertNote(note) {
-  const trackerNote = note.length === 1 ? `${note}-${octave}` : `${note}${octave}`;
-  pattern[activeRow][activeChannel] = `${trackerNote} ${selectedSample} 000`;
-  playCell(pattern[activeRow][activeChannel]);
-  activeRow = (activeRow + 1) % pattern.length;
-  syncReadouts();
-  renderPattern();
-}
-
-function setCellNote(note) {
-  const trackerNote = note.length === 1 ? `${note}-${octave}` : `${note}${octave}`;
-  pattern[activeRow][activeChannel] = `${trackerNote} ${selectedSample} 000`;
-  playCell(pattern[activeRow][activeChannel]);
-  syncReadouts();
-  renderPattern();
-}
-
-function renderNotePopoverButtons() {
-  notePopoverGrid.innerHTML = "";
-  pickerNotes.forEach((note) => {
-    const button = document.createElement("button");
-    button.textContent = note;
-    button.addEventListener("click", () => {
-      setCellNote(note);
-      hideNotePopover();
-    });
-    notePopoverGrid.append(button);
+  volumeSlider.value = selectedVolume.toString();
+  volumeReadout.textContent = selectedVolume.toString().padStart(2, "0");
+  cellPosition.textContent = `ROW ${rowReadout.textContent} · CH ${channelReadout.textContent}`;
+  cellValue.textContent = parsed
+    ? `${parsed.note} · ${sampleVoices[parsed.sample]?.name ?? parsed.sample} · Vol ${parsed.volume}`
+    : `Empty · ${sampleVoices[selectedSample].name} · Vol ${selectedVolume}`;
+  sampleName.textContent = `${selectedSample} ${sampleVoices[selectedSample].name}`;
+  sampleCode.textContent = selectedSample;
+  renderWaveform(selectedSample);
+  document.querySelectorAll(".sample-pad").forEach((item) => item.classList.remove("active"));
+  document.querySelector(`.sample-pad[data-code="${selectedSample}"]`)?.classList.add("active");
+  document.querySelectorAll("#editorSampleGrid button").forEach((item) => {
+    item.classList.toggle("active", item.dataset.sample === selectedSample);
   });
 }
 
-function showNotePopover(x, y) {
-  notePopoverCell.textContent = `${formatRow(activeRow)} / CH ${(activeChannel + 1).toString().padStart(2, "0")}`;
-  notePopover.hidden = false;
-
-  const shellRect = document.querySelector(".phone-shell").getBoundingClientRect();
-  const popoverRect = notePopover.getBoundingClientRect();
-  const left = Math.min(Math.max(x - shellRect.left - popoverRect.width / 2, 8), shellRect.width - popoverRect.width - 8);
-  const top = Math.min(Math.max(y - shellRect.top + 12, 8), shellRect.height - popoverRect.height - 8);
-
-  notePopover.style.left = `${left}px`;
-  notePopover.style.top = `${top}px`;
+function setActiveCellNote(note) {
+  const trackerNote = note.length === 1 ? `${note}-${octave}` : `${note}${octave}`;
+  pattern[activeRow][activeChannel] = makeCell(trackerNote);
+  playCell(pattern[activeRow][activeChannel]);
+  syncReadouts();
+  renderPattern();
 }
 
-function hideNotePopover() {
-  notePopover.hidden = true;
+function updateActiveCellSample(sample) {
+  selectedSample = sample;
+  const parsed = parseCell(pattern[activeRow][activeChannel]);
+  if (parsed) {
+    pattern[activeRow][activeChannel] = makeCell(parsed.note, sample, selectedVolume);
+  }
+  syncReadouts();
+  renderPattern();
 }
 
 function selectSample(sample) {
   selectedSample = sample;
-  document.querySelectorAll(".sample-pad").forEach((item) => item.classList.remove("active"));
-  document.querySelector(`.sample-pad[data-code="${sample}"]`).classList.add("active");
   sampleName.textContent = `${sample} ${sampleVoices[sample].name}`;
   sampleCode.textContent = sample;
   renderWaveform(selectedSample);
+  syncReadouts();
 }
 
 function clearPattern() {
@@ -455,10 +442,10 @@ function loadDemoPattern() {
 
   clearPattern();
   for (let row = 0; row < pattern.length; row += 1) {
-    pattern[row][3] = `${melody[row % melody.length]} 04 000`;
-    if (row % 4 === 0) pattern[row][0] = "C-2 01 000";
-    if (row % 4 === 2) pattern[row][1] = "D-2 02 000";
-    if (row % 2 === 0) pattern[row][2] = `${bass[(row / 2) % bass.length]} 03 000`;
+    pattern[row][3] = makeCell(melody[row % melody.length], "04", 52);
+    if (row % 4 === 0) pattern[row][0] = makeCell("C-2", "01", 56);
+    if (row % 4 === 2) pattern[row][1] = makeCell("D-2", "02", 46);
+    if (row % 2 === 0) pattern[row][2] = makeCell(bass[(row / 2) % bass.length], "03", 44);
   }
 
   activeRow = 0;
@@ -506,19 +493,32 @@ sampleRack.addEventListener("click", (event) => {
   const pad = event.target.closest(".sample-pad");
   if (!pad) return;
 
-  selectSample(pad.dataset.code);
-  playCell(`${sampleVoices[selectedSample].preview} ${selectedSample} 000`);
+  updateActiveCellSample(pad.dataset.code);
+  playCell(makeCell(sampleVoices[selectedSample].preview, selectedSample));
 });
 
-noteRow.addEventListener("contextmenu", (event) => {
-  event.preventDefault();
-});
-
-noteRow.addEventListener("click", (event) => {
+editorNoteGrid.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
 
-  insertNote(button.dataset.note);
+  setActiveCellNote(button.dataset.note);
+});
+
+editorSampleGrid.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+
+  updateActiveCellSample(button.dataset.sample);
+});
+
+volumeSlider.addEventListener("input", (event) => {
+  selectedVolume = Number(event.target.value);
+  const parsed = parseCell(pattern[activeRow][activeChannel]);
+  if (parsed) {
+    pattern[activeRow][activeChannel] = makeCell(parsed.note, parsed.sample, selectedVolume);
+  }
+  syncReadouts();
+  renderPattern();
 });
 
 octaveDown.addEventListener("click", () => {
@@ -539,6 +539,7 @@ channelNext.addEventListener("click", () => moveSelection(0, 1));
 patternGrid.addEventListener("pointerdown", (event) => {
   patternTouchStartY = event.clientY;
   patternTouchLastY = event.clientY;
+  patternDidSwipe = false;
   patternGrid.setPointerCapture(event.pointerId);
 });
 
@@ -548,7 +549,7 @@ patternGrid.addEventListener("pointermove", (event) => {
   const delta = event.clientY - patternTouchLastY;
   if (Math.abs(delta) < 18) return;
 
-  clearTimeout(cellPressTimer);
+  patternDidSwipe = true;
   moveRows(delta > 0 ? -1 : 1);
   patternTouchLastY = event.clientY;
 });
@@ -558,22 +559,18 @@ patternGrid.addEventListener("pointerup", (event) => {
 
   const totalDelta = event.clientY - patternTouchStartY;
   if (Math.abs(totalDelta) > 52) {
+    patternDidSwipe = true;
     moveRows(totalDelta > 0 ? -2 : 2);
   }
 
   patternGrid.releasePointerCapture(event.pointerId);
+  window.setTimeout(() => {
+    patternDidSwipe = false;
+  }, 0);
 });
 
 previewCell.addEventListener("click", () => {
   playCell(pattern[activeRow][activeChannel]);
-});
-
-notePopoverClose.addEventListener("click", hideNotePopover);
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    hideNotePopover();
-  }
 });
 
 clearCell.addEventListener("click", () => {
@@ -610,5 +607,4 @@ playButton.addEventListener("click", () => {
 
 syncReadouts();
 renderWaveform(selectedSample);
-renderNotePopoverButtons();
 renderPattern();

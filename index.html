@@ -37,6 +37,7 @@
       </section>
 
       <section class="pattern-panel" aria-label="Pattern editor">
+        <div class="pattern-hint">Tap cell to edit · Swipe rows</div>
         <div class="channel-head">
           <span></span>
           <span>CH 1</span>
@@ -81,7 +82,7 @@
         </div>
       </section>
 
-      <section class="thumb-deck" aria-label="Note entry controls">
+      <section class="thumb-deck" aria-label="Cell edit controls">
         <div class="tempo-panel" id="tempoPanel" hidden>
           <button class="tempo-step" id="bpmDown" aria-label="Decrease BPM">-</button>
           <label class="tempo-slider">
@@ -92,27 +93,44 @@
           <button class="tempo-done" id="tempoDone">Done</button>
         </div>
         <div class="cell-editor" aria-label="Selected cell editor">
-          <button class="nudge-button" id="rowPrev" aria-label="Previous row">R-</button>
-          <button class="nudge-button" id="channelPrev" aria-label="Previous channel">C-</button>
           <div class="cell-readout">
-            <span id="cellPosition">08 / CH 01</span>
+            <span id="cellPosition">ROW 08 · CH 01</span>
             <strong id="cellValue">--- .. ...</strong>
           </div>
+        </div>
+        <div class="editor-nav">
+          <button class="nudge-button" id="rowPrev" aria-label="Previous row">R-</button>
+          <button class="nudge-button" id="channelPrev" aria-label="Previous channel">C-</button>
           <button class="nudge-button" id="channelNext" aria-label="Next channel">C+</button>
           <button class="nudge-button" id="rowNext" aria-label="Next row">R+</button>
+        </div>
+        <div class="editor-note-grid" id="editorNoteGrid" aria-label="Notes">
+          <button data-note="C">C</button>
+          <button data-note="C#">C#</button>
+          <button data-note="D">D</button>
+          <button data-note="D#">D#</button>
+          <button data-note="E">E</button>
+          <button data-note="F">F</button>
+          <button data-note="F#">F#</button>
+          <button data-note="G">G</button>
+          <button data-note="G#">G#</button>
+          <button data-note="A">A</button>
+          <button data-note="A#">A#</button>
+          <button data-note="B">B</button>
+        </div>
+        <div class="editor-sample-grid" id="editorSampleGrid" aria-label="Cell sample">
+          <button data-sample="01">01 Kick</button>
+          <button data-sample="02">02 Snare</button>
+          <button data-sample="03">03 Bass</button>
+          <button data-sample="04">04 Lead</button>
+        </div>
+        <div class="volume-control">
+          <label for="volumeSlider">Vol <strong id="volumeReadout">48</strong></label>
+          <input id="volumeSlider" type="range" min="0" max="64" value="48" />
         </div>
         <div class="edit-actions">
           <button id="previewCell">Preview</button>
           <button id="clearCell">Clear</button>
-        </div>
-        <div class="note-row" id="noteRow">
-          <button data-note="C" data-sharp="C#">C<small>#</small></button>
-          <button data-note="D" data-sharp="D#">D<small>#</small></button>
-          <button data-note="E">E</button>
-          <button data-note="F" data-sharp="F#">F<small>#</small></button>
-          <button data-note="G" data-sharp="G#">G<small>#</small></button>
-          <button data-note="A" data-sharp="A#">A<small>#</small></button>
-          <button data-note="B">B</button>
         </div>
         <div class="transport">
           <button class="secondary" id="octaveDown">OCT -</button>
@@ -120,13 +138,6 @@
           <button class="secondary" id="octaveUp">OCT +</button>
         </div>
       </section>
-      <div class="note-popover" id="notePopover" hidden>
-        <div class="note-popover-head">
-          <span id="notePopoverCell">00 / CH 01</span>
-          <button id="notePopoverClose" aria-label="Close note picker">x</button>
-        </div>
-        <div class="note-popover-grid" id="notePopoverGrid"></div>
-      </div>
     </main>
 
     <script src="./app.js"></script>
