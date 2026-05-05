@@ -32,7 +32,7 @@ const sampleVoices = {
 
 const emptyCell = "--- .. ...";
 const pattern = Array.from({ length: 64 }, () => Array(4).fill(emptyCell));
-const visiblePatternRows = 18;
+const visiblePatternRows = 17;
 const defaultVolume = 48;
 
 let activeRow = 8;
@@ -388,11 +388,6 @@ function renderPattern() {
         if (patternDidSwipe) return;
         activeRow = row;
         activeChannel = channel;
-        if (armedNote) {
-          writeNoteToActiveCell(armedNote);
-        } else {
-          playCell(pattern[row][channel]);
-        }
         syncReadouts();
         renderPattern();
       });
