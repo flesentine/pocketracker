@@ -32,7 +32,7 @@ const sampleVoices = {
 
 const emptyCell = "--- .. ...";
 const pattern = Array.from({ length: 64 }, () => Array(4).fill(emptyCell));
-const visiblePatternRows = 17;
+const visiblePatternRows = 16;
 const defaultVolume = 48;
 
 let activeRow = 8;
@@ -43,7 +43,9 @@ let selectedSample = "03";
 let isPlaying = false;
 let isDemoLoaded = false;
 let timer;
+let patternTouchStartX = 0;
 let patternTouchStartY = 0;
+let patternTouchLastX = 0;
 let patternTouchLastY = 0;
 let patternDidSwipe = false;
 let selectedVolume = defaultVolume;
@@ -411,6 +413,12 @@ function moveRows(delta) {
   renderPattern();
 }
 
+function moveChannels(delta) {
+  activeChannel = Math.min(Math.max(activeChannel + delta, 0), 3);
+  syncReadouts();
+  renderPattern();
+}
+
 function syncReadouts() {
   const parsed = parseCell(pattern[activeRow][activeChannel]);
   if (parsed) {
@@ -556,7 +564,9 @@ octaveUp.addEventListener("click", () => {
 });
 
 patternGrid.addEventListener("pointerdown", (event) => {
+  patternTouchStartX = event.clientX;
   patternTouchStartY = event.clientY;
+  patternTouchLastX = event.clientX;
   patternTouchLastY = event.clientY;
   patternDidSwipe = false;
   patternGrid.setPointerCapture(event.pointerId);
@@ -565,21 +575,40 @@ patternGrid.addEventListener("pointerdown", (event) => {
 patternGrid.addEventListener("pointermove", (event) => {
   if (!patternGrid.hasPointerCapture(event.pointerId)) return;
 
-  const delta = event.clientY - patternTouchLastY;
-  if (Math.abs(delta) < 18) return;
+  const deltaX = event.clientX - patternTouchLastX;
+  const deltaY = event.clientY - patternTouchLastY;
+  const absX = Math.abs(deltaX);
+  const absY = Math.abs(deltaY);
+
+  if (absX >= 26 && absX > absY * 1.2) {
+    patternDidSwipe = true;
+    moveChannels(deltaX < 0 ? 1 : -1);
+    patternTouchLastX = event.clientX;
+    patternTouchLastY = event.clientY;
+    return;
+  }
+
+  if (absY < 18 || absY <= absX) return;
 
   patternDidSwipe = true;
-  moveRows(delta > 0 ? -1 : 1);
+  moveRows(deltaY > 0 ? -1 : 1);
+  patternTouchLastX = event.clientX;
   patternTouchLastY = event.clientY;
 });
 
 patternGrid.addEventListener("pointerup", (event) => {
   if (!patternGrid.hasPointerCapture(event.pointerId)) return;
 
-  const totalDelta = event.clientY - patternTouchStartY;
-  if (Math.abs(totalDelta) > 52) {
+  const totalDeltaX = event.clientX - patternTouchStartX;
+  const totalDeltaY = event.clientY - patternTouchStartY;
+  const absTotalX = Math.abs(totalDeltaX);
+  const absTotalY = Math.abs(totalDeltaY);
+  if (absTotalX > 58 && absTotalX > absTotalY * 1.2) {
     patternDidSwipe = true;
-    moveRows(totalDelta > 0 ? -2 : 2);
+    moveChannels(totalDeltaX < 0 ? 1 : -1);
+  } else if (absTotalY > 52 && absTotalY > absTotalX) {
+    patternDidSwipe = true;
+    moveRows(totalDeltaY > 0 ? -2 : 2);
   }
 
   patternGrid.releasePointerCapture(event.pointerId);
