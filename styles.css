@@ -266,22 +266,12 @@ h2 {
   background: rgba(166, 233, 87, 0.1);
 }
 
-.waveform {
-  height: 42px;
+.instrument-bank {
   display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  align-items: center;
-  gap: 4px;
+  grid-template-columns: repeat(2, 1fr);
   grid-column: 1;
-  margin: 7px 0 0;
-  padding: 6px;
-  background: #111619;
-  border: 1px solid var(--line);
-}
-
-.waveform span {
-  width: 100%;
-  background: linear-gradient(var(--cyan), var(--lime));
+  gap: 5px;
+  margin-top: 7px;
 }
 
 .sample-rack {
@@ -299,6 +289,12 @@ h2 {
   background: var(--panel-2);
   color: var(--muted);
   font-size: 12px;
+}
+
+.sample-pad.compact {
+  min-height: 28px;
+  font-size: 10px;
+  line-height: 1.1;
 }
 
 .sample-pad.active {
@@ -436,6 +432,16 @@ h2 {
   border: 1px solid #050607;
   background: #171d20;
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.38);
+}
+
+.white-key.active {
+  background: var(--cyan);
+  color: #061211;
+}
+
+.black-key.active {
+  border-color: var(--cyan);
+  background: #2bd1bf;
 }
 
 .key-cs {

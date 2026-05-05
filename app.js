@@ -4,7 +4,7 @@ const bpmTile = document.querySelector("#bpmTile");
 const bpmReadout = document.querySelector("#bpmReadout");
 const channelReadout = document.querySelector("#channelReadout");
 const octaveReadout = document.querySelector("#octaveReadout");
-const sampleRack = document.querySelector("#sampleRack");
+const sampleDeck = document.querySelector(".sample-deck");
 const sampleName = document.querySelector("#sampleName");
 const sampleCode = document.querySelector("#sampleCode");
 const editorNoteGrid = document.querySelector("#editorNoteGrid");
@@ -14,7 +14,6 @@ const playButton = document.querySelector("#playButton");
 const octaveDown = document.querySelector("#octaveDown");
 const octaveUp = document.querySelector("#octaveUp");
 const demoButton = document.querySelector("#demoButton");
-const waveform = document.querySelector(".waveform");
 const clearCell = document.querySelector("#clearCell");
 const tempoPanel = document.querySelector("#tempoPanel");
 const bpmSlider = document.querySelector("#bpmSlider");
@@ -23,10 +22,14 @@ const bpmUp = document.querySelector("#bpmUp");
 const tempoDone = document.querySelector("#tempoDone");
 
 const sampleVoices = {
-  "01": { name: "Kick", preview: "C-2", wave: [88, 64, 42, 24, 14, 9, 7, 5, 4, 3, 3, 2, 2, 2, 2, 2] },
-  "02": { name: "Snare", preview: "D-2", wave: [32, 77, 43, 91, 56, 27, 83, 49, 68, 35, 95, 44, 72, 51, 86, 38] },
-  "03": { name: "Bassline", preview: "C-3", wave: [36, 46, 58, 72, 86, 94, 90, 76, 61, 48, 38, 31, 29, 34, 43, 54] },
-  "04": { name: "Lead", preview: "C-4", wave: [20, 42, 74, 96, 68, 34, 58, 91, 78, 45, 25, 52, 83, 99, 63, 29] },
+  "01": { name: "Kick", preview: "C-2" },
+  "02": { name: "Snare", preview: "D-2" },
+  "03": { name: "Bassline", preview: "C-3" },
+  "04": { name: "Lead", preview: "C-4" },
+  "05": { name: "Hat", preview: "F#2" },
+  "06": { name: "Pluck", preview: "C-4" },
+  "07": { name: "Chord", preview: "C-4" },
+  "08": { name: "Bell", preview: "C-5" },
 };
 
 const emptyCell = "--- .. ...";
@@ -46,6 +49,7 @@ let patternTouchStartY = 0;
 let patternTouchLastY = 0;
 let patternDidSwipe = false;
 let selectedVolume = defaultVolume;
+let armedNote = null;
 let audioContext;
 let noiseBuffer;
 
@@ -63,6 +67,10 @@ function volumeToGain(volume) {
 
 function makeCell(note, sample = selectedSample, volume = selectedVolume) {
   return `${note} ${sample} ${formatVolume(volume)}`;
+}
+
+function noteToTrackerNote(note) {
+  return note.length === 1 ? `${note}-${octave}` : `${note}${octave}`;
 }
 
 function getAudioContext() {
@@ -161,6 +169,25 @@ function playSnare(ctx, when, volume = defaultVolume) {
   snap.stop(when + 0.09);
 }
 
+function playHat(ctx, when, volume = defaultVolume) {
+  const level = volumeToGain(volume);
+  const noise = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+
+  noise.buffer = getNoiseBuffer(ctx);
+  filter.type = "highpass";
+  filter.frequency.setValueAtTime(5200, when);
+  gain.gain.setValueAtTime(0.26 * level, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.07);
+
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  noise.start(when);
+  noise.stop(when + 0.08);
+}
+
 function playBass(ctx, note, when, volume = defaultVolume) {
   const level = volumeToGain(volume);
   const frequency = noteToFrequency(note);
@@ -202,6 +229,34 @@ function playBass(ctx, note, when, volume = defaultVolume) {
   sub.stop(when + 0.42);
 }
 
+function playChord(ctx, note, sample, when, volume = defaultVolume) {
+  const level = volumeToGain(volume);
+  const root = noteToFrequency(note);
+  const intervals = [1, 2 ** (4 / 12), 2 ** (7 / 12)];
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+  const isBell = sample === "08";
+
+  filter.type = isBell ? "highpass" : "lowpass";
+  filter.frequency.setValueAtTime(isBell ? 680 : 1450, when);
+  gain.gain.setValueAtTime(0.001, when);
+  gain.gain.exponentialRampToValueAtTime((isBell ? 0.16 : 0.13) * level, when + 0.018);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + (isBell ? 0.72 : 0.48));
+
+  intervals.forEach((ratio, index) => {
+    const osc = ctx.createOscillator();
+    osc.type = isBell ? "sine" : "triangle";
+    osc.frequency.setValueAtTime(root * ratio, when);
+    osc.detune.setValueAtTime(isBell ? index * 5 : index * -4, when);
+    osc.connect(filter);
+    osc.start(when);
+    osc.stop(when + (isBell ? 0.78 : 0.52));
+  });
+
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+}
+
 function playTone(ctx, note, sample, when, volume = defaultVolume) {
   const level = volumeToGain(volume);
   const frequency = noteToFrequency(note);
@@ -209,22 +264,23 @@ function playTone(ctx, note, sample, when, volume = defaultVolume) {
   const filter = ctx.createBiquadFilter();
   const gain = ctx.createGain();
   const isLead = sample === "04";
+  const isPluck = sample === "06";
 
-  osc.type = isLead ? "sawtooth" : "square";
+  osc.type = isLead ? "sawtooth" : isPluck ? "triangle" : "square";
   osc.frequency.setValueAtTime(frequency, when);
-  osc.detune.setValueAtTime(isLead ? 4 : -7, when);
+  osc.detune.setValueAtTime(isLead ? 4 : isPluck ? 0 : -7, when);
   filter.type = "lowpass";
-  filter.frequency.setValueAtTime(isLead ? 2600 : 720, when);
-  filter.frequency.exponentialRampToValueAtTime(isLead ? 1800 : 360, when + 0.28);
+  filter.frequency.setValueAtTime(isLead ? 2600 : isPluck ? 1900 : 720, when);
+  filter.frequency.exponentialRampToValueAtTime(isLead ? 1800 : isPluck ? 520 : 360, when + 0.28);
   gain.gain.setValueAtTime(0.001, when);
-  gain.gain.exponentialRampToValueAtTime((isLead ? 0.2 : 0.28) * level, when + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.001, when + (isLead ? 0.42 : 0.3));
+  gain.gain.exponentialRampToValueAtTime((isLead ? 0.2 : isPluck ? 0.22 : 0.28) * level, when + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + (isLead ? 0.42 : isPluck ? 0.18 : 0.3));
 
   osc.connect(filter);
   filter.connect(gain);
   gain.connect(ctx.destination);
   osc.start(when);
-  osc.stop(when + (isLead ? 0.46 : 0.34));
+  osc.stop(when + (isLead ? 0.46 : isPluck ? 0.22 : 0.34));
 }
 
 function parseCell(cell) {
@@ -246,8 +302,12 @@ function playCell(cell, when = getAudioContext().currentTime) {
     playKick(ctx, when, parsed.volume);
   } else if (parsed.sample === "02") {
     playSnare(ctx, when, parsed.volume);
+  } else if (parsed.sample === "05") {
+    playHat(ctx, when, parsed.volume);
   } else if (parsed.sample === "03") {
     playBass(ctx, parsed.note, when, parsed.volume);
+  } else if (parsed.sample === "07" || parsed.sample === "08") {
+    playChord(ctx, parsed.note, parsed.sample, when, parsed.volume);
   } else {
     playTone(ctx, parsed.note, parsed.sample, when, parsed.volume);
   }
@@ -330,7 +390,11 @@ function renderPattern() {
         if (patternDidSwipe) return;
         activeRow = row;
         activeChannel = channel;
-        playCell(pattern[row][channel]);
+        if (armedNote) {
+          writeNoteToActiveCell(armedNote);
+        } else {
+          playCell(pattern[row][channel]);
+        }
         syncReadouts();
         renderPattern();
       });
@@ -370,15 +434,22 @@ function syncReadouts() {
   volumeReadout.textContent = selectedVolume.toString().padStart(2, "0");
   sampleName.textContent = `${selectedSample} ${sampleVoices[selectedSample].name}`;
   sampleCode.textContent = selectedSample;
-  renderWaveform(selectedSample);
   document.querySelectorAll(".sample-pad").forEach((item) => item.classList.remove("active"));
   document.querySelector(`.sample-pad[data-code="${selectedSample}"]`)?.classList.add("active");
+  document.querySelectorAll(".piano-keyboard button").forEach((item) => {
+    item.classList.toggle("active", item.dataset.note === armedNote);
+  });
+}
+
+function writeNoteToActiveCell(note) {
+  const trackerNote = noteToTrackerNote(note);
+  pattern[activeRow][activeChannel] = makeCell(trackerNote);
+  playCell(pattern[activeRow][activeChannel]);
 }
 
 function setActiveCellNote(note) {
-  const trackerNote = note.length === 1 ? `${note}-${octave}` : `${note}${octave}`;
-  pattern[activeRow][activeChannel] = makeCell(trackerNote);
-  playCell(pattern[activeRow][activeChannel]);
+  armedNote = note;
+  writeNoteToActiveCell(note);
   syncReadouts();
   renderPattern();
 }
@@ -397,7 +468,6 @@ function selectSample(sample) {
   selectedSample = sample;
   sampleName.textContent = `${sample} ${sampleVoices[sample].name}`;
   sampleCode.textContent = sample;
-  renderWaveform(selectedSample);
   syncReadouts();
 }
 
@@ -443,19 +513,6 @@ function loadDemoPattern() {
   renderPattern();
 }
 
-function renderWaveform(sample) {
-  waveform.querySelectorAll("span").forEach((bar, index) => {
-    bar.style.height = `${sampleVoices[sample].wave[index]}%`;
-  });
-}
-
-function moveSelection(rowDelta, channelDelta) {
-  activeRow = (activeRow + rowDelta + pattern.length) % pattern.length;
-  activeChannel = (activeChannel + channelDelta + 4) % 4;
-  syncReadouts();
-  renderPattern();
-}
-
 function setBpm(value) {
   bpm = Math.min(180, Math.max(80, Number(value)));
   syncReadouts();
@@ -474,7 +531,7 @@ function hideTempoPanel() {
   document.body.classList.remove("tempo-open");
 }
 
-sampleRack.addEventListener("click", (event) => {
+sampleDeck.addEventListener("click", (event) => {
   const pad = event.target.closest(".sample-pad");
   if (!pad) return;
 
@@ -575,5 +632,4 @@ playButton.addEventListener("click", () => {
 });
 
 syncReadouts();
-renderWaveform(selectedSample);
 renderPattern();
