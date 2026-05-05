@@ -92,45 +92,24 @@
           <button class="tempo-step" id="bpmUp" aria-label="Increase BPM">+</button>
           <button class="tempo-done" id="tempoDone">Done</button>
         </div>
-        <div class="cell-editor" aria-label="Selected cell editor">
-          <div class="cell-readout">
-            <span id="cellPosition">ROW 08 · CH 01</span>
-            <strong id="cellValue">--- .. ...</strong>
-          </div>
-        </div>
-        <div class="editor-nav">
-          <button class="nudge-button" id="rowPrev" aria-label="Previous row">R-</button>
-          <button class="nudge-button" id="channelPrev" aria-label="Previous channel">C-</button>
-          <button class="nudge-button" id="channelNext" aria-label="Next channel">C+</button>
-          <button class="nudge-button" id="rowNext" aria-label="Next row">R+</button>
-        </div>
-        <div class="editor-note-grid" id="editorNoteGrid" aria-label="Notes">
-          <button data-note="C">C</button>
-          <button data-note="C#">C#</button>
-          <button data-note="D">D</button>
-          <button data-note="D#">D#</button>
-          <button data-note="E">E</button>
-          <button data-note="F">F</button>
-          <button data-note="F#">F#</button>
-          <button data-note="G">G</button>
-          <button data-note="G#">G#</button>
-          <button data-note="A">A</button>
-          <button data-note="A#">A#</button>
-          <button data-note="B">B</button>
-        </div>
-        <div class="editor-sample-grid" id="editorSampleGrid" aria-label="Cell sample">
-          <button data-sample="01">01 Kick</button>
-          <button data-sample="02">02 Snare</button>
-          <button data-sample="03">03 Bass</button>
-          <button data-sample="04">04 Lead</button>
-        </div>
         <div class="volume-control">
           <label for="volumeSlider">Vol <strong id="volumeReadout">48</strong></label>
           <input id="volumeSlider" type="range" min="0" max="64" value="48" />
-        </div>
-        <div class="edit-actions">
-          <button id="previewCell">Preview</button>
           <button id="clearCell">Clear</button>
+        </div>
+        <div class="piano-keyboard" id="editorNoteGrid" aria-label="Notes">
+          <button class="white-key" data-note="C">C</button>
+          <button class="white-key" data-note="D">D</button>
+          <button class="white-key" data-note="E">E</button>
+          <button class="white-key" data-note="F">F</button>
+          <button class="white-key" data-note="G">G</button>
+          <button class="white-key" data-note="A">A</button>
+          <button class="white-key" data-note="B">B</button>
+          <button class="black-key key-cs" data-note="C#" aria-label="C sharp"></button>
+          <button class="black-key key-ds" data-note="D#" aria-label="D sharp"></button>
+          <button class="black-key key-fs" data-note="F#" aria-label="F sharp"></button>
+          <button class="black-key key-gs" data-note="G#" aria-label="G sharp"></button>
+          <button class="black-key key-as" data-note="A#" aria-label="A sharp"></button>
         </div>
         <div class="transport">
           <button class="secondary" id="octaveDown">OCT -</button>

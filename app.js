@@ -8,7 +8,6 @@ const sampleRack = document.querySelector("#sampleRack");
 const sampleName = document.querySelector("#sampleName");
 const sampleCode = document.querySelector("#sampleCode");
 const editorNoteGrid = document.querySelector("#editorNoteGrid");
-const editorSampleGrid = document.querySelector("#editorSampleGrid");
 const volumeSlider = document.querySelector("#volumeSlider");
 const volumeReadout = document.querySelector("#volumeReadout");
 const playButton = document.querySelector("#playButton");
@@ -16,13 +15,6 @@ const octaveDown = document.querySelector("#octaveDown");
 const octaveUp = document.querySelector("#octaveUp");
 const demoButton = document.querySelector("#demoButton");
 const waveform = document.querySelector(".waveform");
-const cellPosition = document.querySelector("#cellPosition");
-const cellValue = document.querySelector("#cellValue");
-const rowPrev = document.querySelector("#rowPrev");
-const rowNext = document.querySelector("#rowNext");
-const channelPrev = document.querySelector("#channelPrev");
-const channelNext = document.querySelector("#channelNext");
-const previewCell = document.querySelector("#previewCell");
 const clearCell = document.querySelector("#clearCell");
 const tempoPanel = document.querySelector("#tempoPanel");
 const bpmSlider = document.querySelector("#bpmSlider");
@@ -376,18 +368,11 @@ function syncReadouts() {
   octaveReadout.textContent = octave.toString().padStart(2, "0");
   volumeSlider.value = selectedVolume.toString();
   volumeReadout.textContent = selectedVolume.toString().padStart(2, "0");
-  cellPosition.textContent = `ROW ${rowReadout.textContent} · CH ${channelReadout.textContent}`;
-  cellValue.textContent = parsed
-    ? `${parsed.note} · ${sampleVoices[parsed.sample]?.name ?? parsed.sample} · Vol ${parsed.volume}`
-    : `Empty · ${sampleVoices[selectedSample].name} · Vol ${selectedVolume}`;
   sampleName.textContent = `${selectedSample} ${sampleVoices[selectedSample].name}`;
   sampleCode.textContent = selectedSample;
   renderWaveform(selectedSample);
   document.querySelectorAll(".sample-pad").forEach((item) => item.classList.remove("active"));
   document.querySelector(`.sample-pad[data-code="${selectedSample}"]`)?.classList.add("active");
-  document.querySelectorAll("#editorSampleGrid button").forEach((item) => {
-    item.classList.toggle("active", item.dataset.sample === selectedSample);
-  });
 }
 
 function setActiveCellNote(note) {
@@ -504,13 +489,6 @@ editorNoteGrid.addEventListener("click", (event) => {
   setActiveCellNote(button.dataset.note);
 });
 
-editorSampleGrid.addEventListener("click", (event) => {
-  const button = event.target.closest("button");
-  if (!button) return;
-
-  updateActiveCellSample(button.dataset.sample);
-});
-
 volumeSlider.addEventListener("input", (event) => {
   selectedVolume = Number(event.target.value);
   const parsed = parseCell(pattern[activeRow][activeChannel]);
@@ -530,11 +508,6 @@ octaveUp.addEventListener("click", () => {
   octave = Math.min(7, octave + 1);
   syncReadouts();
 });
-
-rowPrev.addEventListener("click", () => moveSelection(-1, 0));
-rowNext.addEventListener("click", () => moveSelection(1, 0));
-channelPrev.addEventListener("click", () => moveSelection(0, -1));
-channelNext.addEventListener("click", () => moveSelection(0, 1));
 
 patternGrid.addEventListener("pointerdown", (event) => {
   patternTouchStartY = event.clientY;
@@ -567,10 +540,6 @@ patternGrid.addEventListener("pointerup", (event) => {
   window.setTimeout(() => {
     patternDidSwipe = false;
   }, 0);
-});
-
-previewCell.addEventListener("click", () => {
-  playCell(pattern[activeRow][activeChannel]);
 });
 
 clearCell.addEventListener("click", () => {

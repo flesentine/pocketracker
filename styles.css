@@ -354,108 +354,19 @@ h2 {
   accent-color: var(--amber);
 }
 
-.cell-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: stretch;
-}
-
-.nudge-button,
-.edit-actions button {
-  min-height: 40px;
-  border: 1px solid var(--line);
-  background: #20282d;
-  color: var(--amber);
-}
-
-.cell-readout {
-  min-width: 0;
-  display: grid;
-  align-content: center;
-  gap: 3px;
-  min-height: 44px;
-  padding: 5px 8px;
-  border: 1px solid rgba(71, 215, 198, 0.45);
-  background: rgba(71, 215, 198, 0.09);
-}
-
-.cell-readout span {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.cell-readout strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--cyan);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.editor-nav {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-}
-
-.edit-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.edit-actions button:last-child {
-  color: var(--red);
-}
-
-.editor-note-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 5px;
-}
-
-.editor-note-grid button,
-.editor-sample-grid button,
 .transport button {
   min-height: 43px;
   border: 1px solid var(--line);
   background: #252d31;
 }
 
-.editor-note-grid button {
-  min-height: 36px;
-  font-size: 15px;
-  touch-action: manipulation;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.editor-sample-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 5px;
-}
-
-.editor-sample-grid button {
-  min-height: 34px;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.editor-sample-grid button.active {
-  border-color: var(--amber);
-  color: var(--text);
-  background: rgba(244, 183, 74, 0.16);
-}
-
 .volume-control {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 48px minmax(0, 1fr) 62px;
+  gap: 6px;
   align-items: center;
-  padding: 6px 8px;
+  min-height: 30px;
+  padding: 4px 6px;
   border: 1px solid var(--line);
   background: #151b1f;
 }
@@ -474,12 +385,84 @@ h2 {
   accent-color: var(--lime);
 }
 
-.editor-note-grid button:active,
-.editor-sample-grid button:active,
+.volume-control button {
+  min-height: 24px;
+  border: 1px solid rgba(255, 107, 93, 0.38);
+  background: rgba(255, 107, 93, 0.08);
+  color: var(--red);
+  font-size: 11px;
+}
+
+.piano-keyboard {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  height: 74px;
+  border: 1px solid var(--line);
+  background: #0f1417;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.white-key,
+.black-key {
+  border: 0;
+  font-weight: 800;
+}
+
+.white-key {
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding: 0 0 8px;
+  border-right: 1px solid #12181b;
+  background: #edf3ee;
+  color: #14191a;
+  font-size: 13px;
+}
+
+.white-key:nth-child(7) {
+  border-right: 0;
+}
+
+.black-key {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  width: 8.6%;
+  height: 45px;
+  border: 1px solid #050607;
+  background: #171d20;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.38);
+}
+
+.key-cs {
+  left: 9.9%;
+}
+
+.key-ds {
+  left: 24.2%;
+}
+
+.key-fs {
+  left: 52.8%;
+}
+
+.key-gs {
+  left: 67.1%;
+}
+
+.key-as {
+  left: 81.4%;
+}
+
+.white-key:active,
+.black-key:active,
 .tempo-step:active,
 .tempo-done:active,
-.nudge-button:active,
-.edit-actions button:active,
+.volume-control button:active,
 .sample-pad:active,
 .transport button:active {
   transform: translateY(1px);
