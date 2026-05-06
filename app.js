@@ -52,6 +52,8 @@ const minVisiblePatternRows = 8;
 const minPatternRowHeight = 22;
 const defaultVolume = 48;
 const cellDragDelay = 420;
+const cellDragAutoScrollEdge = 34;
+const cellDragAutoScrollInterval = 170;
 const patterns = [createPattern(defaultPatternRows)];
 
 let pattern = patterns[0].cells;
@@ -71,6 +73,7 @@ let patternTouchLastY = 0;
 let patternDidSwipe = false;
 let patternHandledTap = false;
 let cellDragTimer;
+let lastCellDragScrollAt = 0;
 let draggedCell = null;
 let isDraggingCell = false;
 let selectedVolume = defaultVolume;
@@ -519,6 +522,7 @@ function beginCellDrag(row, channel) {
   isDraggingCell = true;
   patternDidSwipe = true;
   patternHandledTap = true;
+  lastCellDragScrollAt = 0;
   activeRow = row;
   activeChannel = channel;
   document.body.classList.add("cell-dragging");
@@ -530,12 +534,14 @@ function updateCellDrag(clientX, clientY) {
   if (!isDraggingCell || !draggedCell) return;
 
   const gridRect = patternGrid.getBoundingClientRect();
-  if (clientY < gridRect.top + minPatternRowHeight) {
-    activeRow = Math.max(0, activeRow - 1);
-    renderPattern();
-  } else if (clientY > gridRect.bottom - minPatternRowHeight) {
-    activeRow = Math.min(pattern.length - 1, activeRow + 1);
-    renderPattern();
+  const now = window.performance.now();
+  const canAutoScroll = now - lastCellDragScrollAt >= cellDragAutoScrollInterval;
+  if (canAutoScroll && clientY < gridRect.top + cellDragAutoScrollEdge) {
+    moveRows(-1);
+    lastCellDragScrollAt = now;
+  } else if (canAutoScroll && clientY > gridRect.bottom - cellDragAutoScrollEdge) {
+    moveRows(1);
+    lastCellDragScrollAt = now;
   }
 
   const target = getPatternCellFromPoint(clientX, clientY);
@@ -563,6 +569,7 @@ function finishCellDrag() {
   activeChannel = targetChannel;
   draggedCell = null;
   isDraggingCell = false;
+  lastCellDragScrollAt = 0;
   document.body.classList.remove("cell-dragging");
   syncReadouts();
   renderPattern();
@@ -574,6 +581,7 @@ function cancelCellDrag() {
 
   draggedCell = null;
   isDraggingCell = false;
+  lastCellDragScrollAt = 0;
   document.body.classList.remove("cell-dragging");
   syncReadouts();
   renderPattern();
