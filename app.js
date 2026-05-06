@@ -7,6 +7,9 @@ const octaveReadout = document.querySelector("#octaveReadout");
 const patternReadout = document.querySelector("#patternReadout");
 const rowsReadout = document.querySelector("#rowsReadout");
 const patternLabel = document.querySelector(".top-bar .eyebrow");
+const patternControls = document.querySelector("#patternControls");
+const patternToggleButton = document.querySelector("#patternToggleButton");
+const patternTitleToggle = document.querySelector("#patternTitleToggle");
 const patternPrev = document.querySelector("#patternPrev");
 const patternNext = document.querySelector("#patternNext");
 const patternAdd = document.querySelector("#patternAdd");
@@ -44,7 +47,7 @@ const defaultPatternRows = 64;
 const minPatternRows = 16;
 const maxPatternRows = 128;
 const rowStep = 16;
-const visiblePatternRows = 15;
+const visiblePatternRows = 18;
 const defaultVolume = 48;
 const patterns = [createPattern(defaultPatternRows)];
 
@@ -631,6 +634,13 @@ function hideTempoPanel() {
   document.body.classList.remove("tempo-open");
 }
 
+function togglePatternControls() {
+  patternControls.hidden = !patternControls.hidden;
+  const label = patternControls.hidden ? "Open pattern controls" : "Close pattern controls";
+  patternToggleButton.setAttribute("aria-label", label);
+  patternTitleToggle.setAttribute("aria-label", label);
+}
+
 sampleDeck.addEventListener("click", (event) => {
   const pad = event.target.closest(".sample-pad");
   if (!pad) return;
@@ -644,6 +654,15 @@ patternNext.addEventListener("click", () => switchPattern(activePatternIndex + 1
 patternAdd.addEventListener("click", addPattern);
 rowsDown.addEventListener("click", () => resizePattern(pattern.length - rowStep));
 rowsUp.addEventListener("click", () => resizePattern(pattern.length + rowStep));
+
+patternToggleButton.addEventListener("click", togglePatternControls);
+patternTitleToggle.addEventListener("click", togglePatternControls);
+patternTitleToggle.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+
+  event.preventDefault();
+  togglePatternControls();
+});
 
 function handleNoteInput(button) {
   setActiveCellNote(button.dataset.note);
