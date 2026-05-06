@@ -363,11 +363,7 @@ function stopPlayback() {
 function renderPattern() {
   patternGrid.innerHTML = "";
 
-  const halfWindow = Math.floor(visiblePatternRows / 2);
-  const firstRow = Math.min(
-    Math.max(activeRow - halfWindow, 0),
-    pattern.length - visiblePatternRows,
-  );
+  const firstRow = getFirstVisibleRow();
 
   for (let offset = 0; offset < visiblePatternRows; offset += 1) {
     const row = firstRow + offset;
@@ -401,6 +397,42 @@ function renderPattern() {
 
     patternGrid.append(rowEl);
   }
+}
+
+function getFirstVisibleRow() {
+  const halfWindow = Math.floor(visiblePatternRows / 2);
+  return Math.min(
+    Math.max(activeRow - halfWindow, 0),
+    pattern.length - visiblePatternRows,
+  );
+}
+
+function selectPatternCellFromPoint(clientX, clientY) {
+  const gridRect = patternGrid.getBoundingClientRect();
+  if (
+    clientX < gridRect.left ||
+    clientX > gridRect.right ||
+    clientY < gridRect.top ||
+    clientY > gridRect.bottom
+  ) {
+    return false;
+  }
+
+  const firstRow = getFirstVisibleRow();
+  const rowOffset = Math.min(
+    visiblePatternRows - 1,
+    Math.max(0, Math.floor(((clientY - gridRect.top) / gridRect.height) * visiblePatternRows)),
+  );
+  const row = firstRow + rowOffset;
+  const rowNumberWidth = patternGrid.querySelector(".row-num")?.getBoundingClientRect().width ?? 30;
+  const channelAreaWidth = gridRect.width - rowNumberWidth;
+  const channelX = clientX - gridRect.left - rowNumberWidth;
+  const channel = channelX < 0
+    ? activeChannel
+    : Math.min(3, Math.max(0, Math.floor((channelX / channelAreaWidth) * 4)));
+
+  selectPatternCell(row, channel);
+  return true;
 }
 
 function selectPatternCell(row, channel) {
@@ -618,6 +650,8 @@ patternGrid.addEventListener("pointerup", (event) => {
     if (tappedCell) {
       patternHandledTap = true;
       selectPatternCell(Number(tappedCell.dataset.row), Number(tappedCell.dataset.channel));
+    } else if (selectPatternCellFromPoint(event.clientX, event.clientY)) {
+      patternHandledTap = true;
     }
   }
 
