@@ -47,7 +47,9 @@ const defaultPatternRows = 64;
 const minPatternRows = 16;
 const maxPatternRows = 128;
 const rowStep = 16;
-const visiblePatternRows = 18;
+const maxVisiblePatternRows = 18;
+const minVisiblePatternRows = 8;
+const minPatternRowHeight = 22;
 const defaultVolume = 48;
 const patterns = [createPattern(defaultPatternRows)];
 
@@ -395,10 +397,13 @@ function stopPlayback() {
 function renderPattern() {
   patternGrid.innerHTML = "";
 
+  const visibleRows = getVisiblePatternRows();
   const firstRow = getFirstVisibleRow();
+  patternGrid.style.gridTemplateRows = `repeat(${visibleRows}, minmax(${minPatternRowHeight}px, 1fr))`;
 
-  for (let offset = 0; offset < visiblePatternRows; offset += 1) {
+  for (let offset = 0; offset < visibleRows; offset += 1) {
     const row = firstRow + offset;
+    const rowCells = pattern[row] ?? Array(4).fill(emptyCell);
     const rowEl = document.createElement("div");
     rowEl.className = `pattern-row${row === activeRow ? " active" : ""}`;
     rowEl.dataset.row = row;
@@ -408,7 +413,7 @@ function renderPattern() {
     rowNum.textContent = formatRow(row);
     rowEl.append(rowNum);
 
-    pattern[row].forEach((cell, channel) => {
+    rowCells.forEach((cell, channel) => {
       const span = document.createElement("span");
       span.className = `pattern-cell${row === activeRow && channel === activeChannel ? " selected" : ""}`;
       span.dataset.channel = channel;
@@ -431,11 +436,24 @@ function renderPattern() {
   }
 }
 
+function getVisiblePatternRows() {
+  const fittedRows = patternGrid.clientHeight
+    ? Math.floor(patternGrid.clientHeight / minPatternRowHeight)
+    : maxVisiblePatternRows;
+
+  return Math.min(
+    pattern.length,
+    maxVisiblePatternRows,
+    Math.max(minVisiblePatternRows, fittedRows),
+  );
+}
+
 function getFirstVisibleRow() {
-  const halfWindow = Math.floor(visiblePatternRows / 2);
+  const visibleRows = getVisiblePatternRows();
+  const halfWindow = Math.floor(visibleRows / 2);
   return Math.min(
     Math.max(activeRow - halfWindow, 0),
-    pattern.length - visiblePatternRows,
+    Math.max(0, pattern.length - visibleRows),
   );
 }
 
@@ -451,11 +469,12 @@ function selectPatternCellFromPoint(clientX, clientY) {
   }
 
   const firstRow = getFirstVisibleRow();
+  const visibleRows = getVisiblePatternRows();
   const rowOffset = Math.min(
-    visiblePatternRows - 1,
-    Math.max(0, Math.floor(((clientY - gridRect.top) / gridRect.height) * visiblePatternRows)),
+    visibleRows - 1,
+    Math.max(0, Math.floor(((clientY - gridRect.top) / gridRect.height) * visibleRows)),
   );
-  const row = firstRow + rowOffset;
+  const row = Math.min(pattern.length - 1, firstRow + rowOffset);
   const rowNumberWidth = patternGrid.querySelector(".row-num")?.getBoundingClientRect().width ?? 30;
   const channelAreaWidth = gridRect.width - rowNumberWidth;
   const channelX = clientX - gridRect.left - rowNumberWidth;
@@ -639,6 +658,7 @@ function togglePatternControls() {
   const label = patternControls.hidden ? "Open pattern controls" : "Close pattern controls";
   patternToggleButton.setAttribute("aria-label", label);
   patternTitleToggle.setAttribute("aria-label", label);
+  renderPattern();
 }
 
 sampleDeck.addEventListener("click", (event) => {
@@ -810,6 +830,8 @@ bpmSlider.addEventListener("input", (event) => {
 bpmDown.addEventListener("click", () => setBpm(bpm - 1));
 bpmUp.addEventListener("click", () => setBpm(bpm + 1));
 tempoDone.addEventListener("click", hideTempoPanel);
+
+window.addEventListener("resize", renderPattern);
 
 playButton.addEventListener("click", () => {
   if (isPlaying) {
