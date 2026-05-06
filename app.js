@@ -36,7 +36,7 @@ const pattern = Array.from({ length: 64 }, () => Array(4).fill(emptyCell));
 const visiblePatternRows = 15;
 const defaultVolume = 48;
 
-let activeRow = 8;
+let activeRow = 0;
 let activeChannel = 0;
 let octave = 3;
 let bpm = 126;
