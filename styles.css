@@ -58,7 +58,7 @@ button {
   height: 100svh;
   max-height: 932px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   gap: 7px;
   overflow: hidden;
   padding: 10px;
@@ -67,6 +67,7 @@ button {
 }
 
 .top-bar,
+.pattern-controls,
 .status-strip,
 .sample-deck,
 .thumb-deck,
@@ -120,6 +121,41 @@ h2 {
   font-size: 9px;
   white-space: nowrap;
   pointer-events: none;
+}
+
+.pattern-controls {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px 46px 36px minmax(0, 1fr) 36px;
+  gap: 5px;
+  padding: 6px;
+}
+
+.pattern-controls button {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  background: #20282d;
+  color: var(--amber);
+  font-size: 11px;
+}
+
+.pattern-controls div {
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(71, 215, 198, 0.36);
+  background: rgba(71, 215, 198, 0.08);
+}
+
+.pattern-controls span {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.pattern-controls strong {
+  color: var(--cyan);
+  font-size: 13px;
 }
 
 .status-strip {

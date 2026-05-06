@@ -4,6 +4,14 @@ const bpmTile = document.querySelector("#bpmTile");
 const bpmReadout = document.querySelector("#bpmReadout");
 const channelReadout = document.querySelector("#channelReadout");
 const octaveReadout = document.querySelector("#octaveReadout");
+const patternReadout = document.querySelector("#patternReadout");
+const rowsReadout = document.querySelector("#rowsReadout");
+const patternLabel = document.querySelector(".top-bar .eyebrow");
+const patternPrev = document.querySelector("#patternPrev");
+const patternNext = document.querySelector("#patternNext");
+const patternAdd = document.querySelector("#patternAdd");
+const rowsDown = document.querySelector("#rowsDown");
+const rowsUp = document.querySelector("#rowsUp");
 const sampleDeck = document.querySelector(".sample-deck");
 const editorNoteGrid = document.querySelector("#editorNoteGrid");
 const volumeSlider = document.querySelector("#volumeSlider");
@@ -32,10 +40,16 @@ const sampleVoices = {
 };
 
 const emptyCell = "--- .. ...";
-const pattern = Array.from({ length: 64 }, () => Array(4).fill(emptyCell));
+const defaultPatternRows = 64;
+const minPatternRows = 16;
+const maxPatternRows = 128;
+const rowStep = 16;
 const visiblePatternRows = 15;
 const defaultVolume = 48;
+const patterns = [createPattern(defaultPatternRows)];
 
+let pattern = patterns[0].cells;
+let activePatternIndex = 0;
 let activeRow = 0;
 let activeChannel = 0;
 let octave = 3;
@@ -56,6 +70,18 @@ let lastTouchEnd = 0;
 let ignoreNextNoteClick = false;
 let audioContext;
 let noiseBuffer;
+
+function createPattern(rows) {
+  return {
+    rows,
+    cells: Array.from({ length: rows }, () => Array(4).fill(emptyCell)),
+  };
+}
+
+function clampPatternPosition() {
+  activeRow = Math.min(Math.max(activeRow, 0), pattern.length - 1);
+  activeChannel = Math.min(Math.max(activeChannel, 0), 3);
+}
 
 function formatRow(row) {
   return row.toString().padStart(2, "0");
@@ -441,6 +467,7 @@ function selectPatternCellFromPoint(clientX, clientY) {
 function selectPatternCell(row, channel) {
   activeRow = row;
   activeChannel = channel;
+  clampPatternPosition();
   syncReadouts();
   renderPattern();
 }
@@ -458,6 +485,7 @@ function moveChannels(delta) {
 }
 
 function syncReadouts() {
+  clampPatternPosition();
   const parsed = parseCell(pattern[activeRow][activeChannel]);
   if (parsed) {
     selectedSample = parsed.sample;
@@ -466,6 +494,9 @@ function syncReadouts() {
 
   bpmReadout.textContent = bpm.toString();
   bpmSlider.value = bpm.toString();
+  patternReadout.textContent = (activePatternIndex + 1).toString().padStart(2, "0");
+  patternLabel.textContent = `Pattern ${(activePatternIndex + 1).toString().padStart(2, "0")}`;
+  rowsReadout.textContent = pattern.length.toString();
   rowReadout.textContent = formatRow(activeRow);
   channelReadout.textContent = (activeChannel + 1).toString().padStart(2, "0");
   octaveReadout.textContent = octave.toString().padStart(2, "0");
@@ -504,6 +535,40 @@ function updateActiveCellSample(sample) {
 function selectSample(sample) {
   selectedSample = sample;
   syncReadouts();
+}
+
+function switchPattern(index) {
+  activePatternIndex = Math.min(Math.max(index, 0), patterns.length - 1);
+  pattern = patterns[activePatternIndex].cells;
+  activeRow = 0;
+  activeChannel = 0;
+  syncReadouts();
+  renderPattern();
+}
+
+function addPattern() {
+  patterns.push(createPattern(defaultPatternRows));
+  switchPattern(patterns.length - 1);
+}
+
+function resizePattern(rowCount) {
+  const nextRows = Math.min(maxPatternRows, Math.max(minPatternRows, rowCount));
+  const activePattern = patterns[activePatternIndex];
+  if (nextRows === activePattern.cells.length) return;
+
+  if (nextRows > activePattern.cells.length) {
+    while (activePattern.cells.length < nextRows) {
+      activePattern.cells.push(Array(4).fill(emptyCell));
+    }
+  } else {
+    activePattern.cells.length = nextRows;
+  }
+
+  activePattern.rows = nextRows;
+  pattern = activePattern.cells;
+  clampPatternPosition();
+  syncReadouts();
+  renderPattern();
 }
 
 function clearPattern() {
@@ -573,6 +638,12 @@ sampleDeck.addEventListener("click", (event) => {
   updateActiveCellSample(pad.dataset.code);
   playCell(makeCell(sampleVoices[selectedSample].preview, selectedSample));
 });
+
+patternPrev.addEventListener("click", () => switchPattern(activePatternIndex - 1));
+patternNext.addEventListener("click", () => switchPattern(activePatternIndex + 1));
+patternAdd.addEventListener("click", addPattern);
+rowsDown.addEventListener("click", () => resizePattern(pattern.length - rowStep));
+rowsUp.addEventListener("click", () => resizePattern(pattern.length + rowStep));
 
 function handleNoteInput(button) {
   setActiveCellNote(button.dataset.note);
