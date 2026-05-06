@@ -602,6 +602,10 @@ octaveUp.addEventListener("click", () => {
 
 phoneShell.addEventListener("touchend", (event) => {
   if (event.touches.length > 0) return;
+  if (event.target.closest("button, input, .pattern-cell, .pattern-row, .sample-pad, .piano-keyboard")) {
+    lastTouchEnd = 0;
+    return;
+  }
 
   const now = Date.now();
   if (now - lastTouchEnd < 320) {
