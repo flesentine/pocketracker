@@ -53,6 +53,7 @@ let patternHandledTap = false;
 let selectedVolume = defaultVolume;
 let armedNote = null;
 let lastTouchEnd = 0;
+let notePointerHandled = false;
 let audioContext;
 let noiseBuffer;
 
@@ -573,11 +574,32 @@ sampleDeck.addEventListener("click", (event) => {
   playCell(makeCell(sampleVoices[selectedSample].preview, selectedSample));
 });
 
+function handleNoteInput(button) {
+  setActiveCellNote(button.dataset.note);
+}
+
+editorNoteGrid.addEventListener("pointerdown", (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+
+  event.preventDefault();
+  notePointerHandled = true;
+  handleNoteInput(button);
+  window.setTimeout(() => {
+    notePointerHandled = false;
+  }, 350);
+});
+
 editorNoteGrid.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
 
-  setActiveCellNote(button.dataset.note);
+  if (notePointerHandled) {
+    event.preventDefault();
+    return;
+  }
+
+  handleNoteInput(button);
 });
 
 volumeSlider.addEventListener("input", (event) => {
