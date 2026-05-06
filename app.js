@@ -52,8 +52,8 @@ const minVisiblePatternRows = 8;
 const minPatternRowHeight = 22;
 const defaultVolume = 48;
 const cellDragDelay = 420;
-const cellDragAutoScrollEdge = 34;
-const cellDragAutoScrollInterval = 170;
+const cellDragAutoScrollEdge = 26;
+const cellDragAutoScrollInterval = 360;
 const patterns = [createPattern(defaultPatternRows)];
 
 let pattern = patterns[0].cells;
@@ -74,6 +74,7 @@ let patternDidSwipe = false;
 let patternHandledTap = false;
 let cellDragTimer;
 let lastCellDragScrollAt = 0;
+let cellDragFirstVisibleRow = null;
 let draggedCell = null;
 let isDraggingCell = false;
 let selectedVolume = defaultVolume;
@@ -493,6 +494,13 @@ function getVisiblePatternRows() {
 
 function getFirstVisibleRow() {
   const visibleRows = getVisiblePatternRows();
+  if (isDraggingCell && cellDragFirstVisibleRow !== null) {
+    return Math.min(
+      Math.max(cellDragFirstVisibleRow, 0),
+      Math.max(0, pattern.length - visibleRows),
+    );
+  }
+
   const halfWindow = Math.floor(visibleRows / 2);
   return Math.min(
     Math.max(activeRow - halfWindow, 0),
@@ -523,6 +531,7 @@ function beginCellDrag(row, channel) {
   patternDidSwipe = true;
   patternHandledTap = true;
   lastCellDragScrollAt = 0;
+  cellDragFirstVisibleRow = getFirstVisibleRow();
   activeRow = row;
   activeChannel = channel;
   document.body.classList.add("cell-dragging");
@@ -537,10 +546,13 @@ function updateCellDrag(clientX, clientY) {
   const now = window.performance.now();
   const canAutoScroll = now - lastCellDragScrollAt >= cellDragAutoScrollInterval;
   if (canAutoScroll && clientY < gridRect.top + cellDragAutoScrollEdge) {
-    moveRows(-1);
+    cellDragFirstVisibleRow = Math.max(0, getFirstVisibleRow() - 1);
+    renderPattern();
     lastCellDragScrollAt = now;
   } else if (canAutoScroll && clientY > gridRect.bottom - cellDragAutoScrollEdge) {
-    moveRows(1);
+    const maxFirstRow = Math.max(0, pattern.length - getVisiblePatternRows());
+    cellDragFirstVisibleRow = Math.min(maxFirstRow, getFirstVisibleRow() + 1);
+    renderPattern();
     lastCellDragScrollAt = now;
   }
 
@@ -570,6 +582,7 @@ function finishCellDrag() {
   draggedCell = null;
   isDraggingCell = false;
   lastCellDragScrollAt = 0;
+  cellDragFirstVisibleRow = null;
   document.body.classList.remove("cell-dragging");
   syncReadouts();
   renderPattern();
@@ -582,6 +595,7 @@ function cancelCellDrag() {
   draggedCell = null;
   isDraggingCell = false;
   lastCellDragScrollAt = 0;
+  cellDragFirstVisibleRow = null;
   document.body.classList.remove("cell-dragging");
   syncReadouts();
   renderPattern();
