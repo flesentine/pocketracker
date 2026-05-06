@@ -26,7 +26,7 @@
       content="A pocket-sized old-school tracker for making patterns with synth drums, bass, leads, and piano-style note entry."
     />
     <meta name="twitter:image" content="https://flesentine.github.io/pocketracker/og-image.png?v=20260506-11" />
-    <link rel="stylesheet" href="./styles.css?v=20260506-13" />
+    <link rel="stylesheet" href="./styles.css?v=20260506-14" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Pocket tracker prototype">
@@ -36,24 +36,30 @@
           <p class="eyebrow">Pattern 01</p>
           <h1>Pocket Tracker</h1>
         </div>
-        <span class="version-stamp" aria-label="Build version">v2026.05.06.13</span>
+        <span class="version-stamp" aria-label="Build version">v2026.05.06.14</span>
         <button class="icon-button" id="demoButton" aria-label="Load demo song">Demo</button>
       </header>
 
       <section class="pattern-controls" id="patternControls" aria-label="Pattern controls" hidden>
-        <button id="patternPrev" aria-label="Previous pattern">P-</button>
-        <div>
-          <span>Pattern</span>
-          <strong id="patternReadout">01</strong>
+        <div class="pattern-toolbar">
+          <button id="patternPrev" aria-label="Previous pattern">P-</button>
+          <div>
+            <span>Pattern</span>
+            <strong id="patternReadout">01</strong>
+          </div>
+          <button id="patternNext" aria-label="Next pattern">P+</button>
+          <button id="patternAdd" aria-label="Add pattern">New</button>
+          <button id="rowsDown" aria-label="Shorter pattern">R-</button>
+          <div>
+            <span>Rows</span>
+            <strong id="rowsReadout">64</strong>
+          </div>
+          <button id="rowsUp" aria-label="Longer pattern">R+</button>
         </div>
-        <button id="patternNext" aria-label="Next pattern">P+</button>
-        <button id="patternAdd" aria-label="Add pattern">New</button>
-        <button id="rowsDown" aria-label="Shorter pattern">R-</button>
-        <div>
-          <span>Rows</span>
-          <strong id="rowsReadout">64</strong>
+        <div class="sequence-builder" aria-label="Pattern sequence">
+          <div class="sequence-lane" id="sequenceLane" aria-label="Playback sequence"></div>
+          <div class="pattern-bank" id="patternBank" aria-label="Available patterns"></div>
         </div>
-        <button id="rowsUp" aria-label="Longer pattern">R+</button>
       </section>
 
       <section class="status-strip" aria-label="Playback status">
@@ -136,6 +142,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260506-13"></script>
+    <script src="./app.js?v=20260506-14"></script>
   </body>
 </html>

@@ -15,6 +15,8 @@ const patternNext = document.querySelector("#patternNext");
 const patternAdd = document.querySelector("#patternAdd");
 const rowsDown = document.querySelector("#rowsDown");
 const rowsUp = document.querySelector("#rowsUp");
+const sequenceLane = document.querySelector("#sequenceLane");
+const patternBank = document.querySelector("#patternBank");
 const sampleDeck = document.querySelector(".sample-deck");
 const editorNoteGrid = document.querySelector("#editorNoteGrid");
 const volumeSlider = document.querySelector("#volumeSlider");
@@ -55,9 +57,11 @@ const cellDragDelay = 420;
 const cellDragAutoScrollEdge = 26;
 const cellDragAutoScrollInterval = 360;
 const patterns = [createPattern(defaultPatternRows)];
+const patternSequence = [0, null];
 
 let pattern = patterns[0].cells;
 let activePatternIndex = 0;
+let activeSequenceStep = 0;
 let activeRow = 0;
 let activeChannel = 0;
 let octave = 3;
@@ -77,6 +81,8 @@ let lastCellDragScrollAt = 0;
 let cellDragFirstVisibleRow = null;
 let draggedCell = null;
 let isDraggingCell = false;
+let sequenceDrag = null;
+let queuedPatternForSequence = null;
 let selectedVolume = defaultVolume;
 let armedNote = null;
 let lastTouchEnd = 0;
@@ -367,14 +373,68 @@ function getRowDuration() {
   return Math.round(60000 / (bpm * 2.5));
 }
 
+function getPlayableSequence() {
+  return patternSequence
+    .map((patternIndex, step) => ({ patternIndex, step }))
+    .filter((item) => Number.isInteger(item.patternIndex) && patterns[item.patternIndex]);
+}
+
+function normalizeSequence() {
+  for (let index = patternSequence.length - 1; index > 0; index -= 1) {
+    if (patternSequence[index] !== null || patternSequence[index - 1] !== null) break;
+    patternSequence.pop();
+  }
+
+  if (patternSequence.length === 0 || patternSequence[0] === null) {
+    patternSequence[0] = 0;
+  }
+
+  if (patternSequence[patternSequence.length - 1] !== null) {
+    patternSequence.push(null);
+  }
+}
+
+function setActivePattern(index, { resetRow = false, sequenceStep = activeSequenceStep } = {}) {
+  activePatternIndex = Math.min(Math.max(index, 0), patterns.length - 1);
+  activeSequenceStep = sequenceStep;
+  pattern = patterns[activePatternIndex].cells;
+  if (resetRow) activeRow = 0;
+  clampPatternPosition();
+}
+
+function findSequenceStepForPattern(patternIndex) {
+  const found = patternSequence.findIndex((item) => item === patternIndex);
+  return found >= 0 ? found : activeSequenceStep;
+}
+
+function advanceSequencedPattern() {
+  const playable = getPlayableSequence();
+  if (playable.length === 0) {
+    activeRow = 0;
+    return;
+  }
+
+  const currentPlayableIndex = playable.findIndex((item) => item.step === activeSequenceStep);
+  const nextPlayable = playable[(currentPlayableIndex + 1 + playable.length) % playable.length];
+  setActivePattern(nextPlayable.patternIndex, {
+    resetRow: true,
+    sequenceStep: nextPlayable.step,
+  });
+}
+
 function schedulePlaybackTick() {
   clearTimeout(timer);
   if (!isPlaying) return;
 
   timer = setTimeout(() => {
-    activeRow = (activeRow + 1) % pattern.length;
+    if (activeRow >= pattern.length - 1) {
+      advanceSequencedPattern();
+    } else {
+      activeRow += 1;
+    }
     syncReadouts();
     renderPattern();
+    renderSequencer();
     playRow(activeRow);
     schedulePlaybackTick();
   }, getRowDuration());
@@ -384,13 +444,22 @@ function startPlayback(fromBeginning = false) {
   clearTimeout(timer);
   isPlaying = true;
   if (fromBeginning) {
-    activeRow = 0;
+    const playable = getPlayableSequence();
+    if (playable.length > 0) {
+      setActivePattern(playable[0].patternIndex, {
+        resetRow: true,
+        sequenceStep: playable[0].step,
+      });
+    } else {
+      activeRow = 0;
+    }
   }
 
   document.body.classList.add("playing");
   playButton.textContent = "Stop";
   syncReadouts();
   renderPattern();
+  renderSequencer();
   playRow(activeRow);
   schedulePlaybackTick();
 }
@@ -450,6 +519,46 @@ function renderPattern() {
 
     patternGrid.append(rowEl);
   }
+}
+
+function renderSequencer() {
+  normalizeSequence();
+  sequenceLane.innerHTML = "";
+  patternBank.innerHTML = "";
+
+  patternSequence.forEach((patternIndex, step) => {
+    const slot = document.createElement("button");
+    const isFilled = Number.isInteger(patternIndex);
+    slot.className = [
+      "sequence-slot",
+      isFilled ? "filled" : "",
+      step === activeSequenceStep && isFilled ? "active" : "",
+      sequenceDrag?.targetStep === step ? "drop-target" : "",
+    ].filter(Boolean).join(" ");
+    slot.type = "button";
+    slot.dataset.step = step;
+    slot.innerHTML = isFilled
+      ? `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>P${(patternIndex + 1).toString().padStart(2, "0")}</strong>`
+      : `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>...</strong>`;
+    slot.setAttribute("aria-label", isFilled
+      ? `Sequence step ${step + 1}, pattern ${patternIndex + 1}`
+      : `Empty sequence step ${step + 1}`);
+    sequenceLane.append(slot);
+  });
+
+  patterns.forEach((item, index) => {
+    const pad = document.createElement("button");
+    pad.className = [
+      "bank-pattern",
+      index === activePatternIndex ? "active" : "",
+      index === queuedPatternForSequence ? "queued" : "",
+    ].filter(Boolean).join(" ");
+    pad.type = "button";
+    pad.dataset.pattern = index;
+    pad.innerHTML = `<strong>${(index + 1).toString().padStart(2, "0")}</strong><span>${item.cells.length}</span>`;
+    pad.setAttribute("aria-label", `Pattern ${index + 1}`);
+    patternBank.append(pad);
+  });
 }
 
 function getPatternCellFromPoint(clientX, clientY) {
@@ -514,6 +623,70 @@ function selectPatternCellFromPoint(clientX, clientY) {
 
   selectPatternCell(cell.row, cell.channel);
   return true;
+}
+
+function getSequenceStepFromPoint(clientX, clientY) {
+  const target = document.elementFromPoint(clientX, clientY)?.closest(".sequence-slot");
+  if (!target || !sequenceLane.contains(target)) return null;
+
+  return Number(target.dataset.step);
+}
+
+function beginSequenceDrag(patternIndex, sourceStep = null) {
+  if (!Number.isInteger(patternIndex) || !patterns[patternIndex]) return;
+
+  sequenceDrag = {
+    patternIndex,
+    sourceStep,
+    targetStep: sourceStep,
+  };
+  document.body.classList.add("sequencing-drag");
+  renderSequencer();
+}
+
+function updateSequenceDrag(clientX, clientY) {
+  if (!sequenceDrag) return;
+
+  const targetStep = getSequenceStepFromPoint(clientX, clientY);
+  if (targetStep === null || targetStep === sequenceDrag.targetStep) return;
+
+  sequenceDrag.targetStep = targetStep;
+  renderSequencer();
+}
+
+function finishSequenceDrag() {
+  if (!sequenceDrag) return;
+
+  const { patternIndex, sourceStep, targetStep } = sequenceDrag;
+  if (targetStep !== null) {
+    if (sourceStep !== null && sourceStep !== targetStep) {
+      patternSequence[sourceStep] = null;
+    }
+    patternSequence[targetStep] = patternIndex;
+    activeSequenceStep = targetStep;
+    setActivePattern(patternIndex, { sequenceStep: targetStep });
+    normalizeSequence();
+  } else if (sourceStep === null) {
+    queuedPatternForSequence = patternIndex;
+    switchPattern(patternIndex);
+    sequenceDrag = null;
+    document.body.classList.remove("sequencing-drag");
+    renderSequencer();
+    return;
+  }
+
+  sequenceDrag = null;
+  document.body.classList.remove("sequencing-drag");
+  syncReadouts();
+  renderPattern();
+  renderSequencer();
+}
+
+function cancelSequenceDrag() {
+  sequenceDrag = null;
+  queuedPatternForSequence = null;
+  document.body.classList.remove("sequencing-drag");
+  renderSequencer();
 }
 
 function beginCellDrag(row, channel) {
@@ -675,16 +848,21 @@ function selectSample(sample) {
 }
 
 function switchPattern(index) {
-  activePatternIndex = Math.min(Math.max(index, 0), patterns.length - 1);
-  pattern = patterns[activePatternIndex].cells;
+  const nextIndex = Math.min(Math.max(index, 0), patterns.length - 1);
+  setActivePattern(nextIndex, {
+    resetRow: true,
+    sequenceStep: findSequenceStepForPattern(nextIndex),
+  });
   activeRow = 0;
   activeChannel = 0;
   syncReadouts();
   renderPattern();
+  renderSequencer();
 }
 
 function addPattern() {
   patterns.push(createPattern(defaultPatternRows));
+  normalizeSequence();
   switchPattern(patterns.length - 1);
 }
 
@@ -706,6 +884,7 @@ function resizePattern(rowCount) {
   clampPatternPosition();
   syncReadouts();
   renderPattern();
+  renderSequencer();
 }
 
 function clearPattern() {
@@ -774,6 +953,7 @@ function togglePatternControls() {
   patternToggleButton.setAttribute("aria-label", label);
   patternTitleToggle.setAttribute("aria-label", label);
   renderPattern();
+  renderSequencer();
 }
 
 sampleDeck.addEventListener("click", (event) => {
@@ -797,6 +977,94 @@ patternTitleToggle.addEventListener("keydown", (event) => {
 
   event.preventDefault();
   togglePatternControls();
+});
+
+patternBank.addEventListener("click", (event) => {
+  if (sequenceDrag) return;
+
+  const pad = event.target.closest(".bank-pattern");
+  if (!pad) return;
+
+  queuedPatternForSequence = Number(pad.dataset.pattern);
+  switchPattern(queuedPatternForSequence);
+  renderSequencer();
+});
+
+sequenceLane.addEventListener("click", (event) => {
+  if (sequenceDrag) return;
+
+  const slot = event.target.closest(".sequence-slot");
+  if (!slot) return;
+
+  const patternIndex = patternSequence[Number(slot.dataset.step)];
+  if (Number.isInteger(queuedPatternForSequence)) {
+    patternSequence[Number(slot.dataset.step)] = queuedPatternForSequence;
+    activeSequenceStep = Number(slot.dataset.step);
+    normalizeSequence();
+    setActivePattern(queuedPatternForSequence, {
+      resetRow: true,
+      sequenceStep: activeSequenceStep,
+    });
+    queuedPatternForSequence = null;
+    syncReadouts();
+    renderPattern();
+    renderSequencer();
+    return;
+  }
+
+  if (Number.isInteger(patternIndex)) {
+    setActivePattern(patternIndex, {
+      resetRow: true,
+      sequenceStep: Number(slot.dataset.step),
+    });
+    activeChannel = 0;
+    syncReadouts();
+    renderPattern();
+    renderSequencer();
+  }
+});
+
+patternControls.addEventListener("pointerdown", (event) => {
+  const bankPad = event.target.closest(".bank-pattern");
+  const sequenceSlot = event.target.closest(".sequence-slot.filled");
+  if (!bankPad && !sequenceSlot) return;
+
+  if (bankPad) {
+    beginSequenceDrag(Number(bankPad.dataset.pattern));
+  } else {
+    const sourceStep = Number(sequenceSlot.dataset.step);
+    beginSequenceDrag(patternSequence[sourceStep], sourceStep);
+  }
+  patternControls.setPointerCapture(event.pointerId);
+});
+
+patternControls.addEventListener("pointermove", (event) => {
+  if (!sequenceDrag || !patternControls.hasPointerCapture(event.pointerId)) return;
+
+  updateSequenceDrag(event.clientX, event.clientY);
+});
+
+patternControls.addEventListener("pointerup", (event) => {
+  if (!sequenceDrag || !patternControls.hasPointerCapture(event.pointerId)) return;
+
+  updateSequenceDrag(event.clientX, event.clientY);
+  finishSequenceDrag();
+  patternControls.releasePointerCapture(event.pointerId);
+});
+
+patternControls.addEventListener("pointercancel", cancelSequenceDrag);
+
+document.addEventListener("pointermove", (event) => {
+  if (!sequenceDrag) return;
+
+  updateSequenceDrag(event.clientX, event.clientY);
+});
+
+document.addEventListener("pointerup", (event) => {
+  if (!sequenceDrag) return;
+
+  updateSequenceDrag(event.clientX, event.clientY);
+  finishSequenceDrag();
 });
 
 function handleNoteInput(button) {
@@ -999,3 +1267,4 @@ playButton.addEventListener("click", () => {
 
 syncReadouts();
 renderPattern();
+renderSequencer();
