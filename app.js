@@ -18,6 +18,7 @@ const bpmSlider = document.querySelector("#bpmSlider");
 const bpmDown = document.querySelector("#bpmDown");
 const bpmUp = document.querySelector("#bpmUp");
 const tempoDone = document.querySelector("#tempoDone");
+const phoneShell = document.querySelector(".phone-shell");
 
 const sampleVoices = {
   "01": { name: "Kick", preview: "C-2" },
@@ -51,6 +52,7 @@ let patternDidSwipe = false;
 let patternHandledTap = false;
 let selectedVolume = defaultVolume;
 let armedNote = null;
+let lastTouchEnd = 0;
 let audioContext;
 let noiseBuffer;
 
@@ -597,6 +599,16 @@ octaveUp.addEventListener("click", () => {
   octave = Math.min(7, octave + 1);
   syncReadouts();
 });
+
+phoneShell.addEventListener("touchend", (event) => {
+  if (event.touches.length > 0) return;
+
+  const now = Date.now();
+  if (now - lastTouchEnd < 320) {
+    event.preventDefault();
+  }
+  lastTouchEnd = now;
+}, { passive: false });
 
 patternGrid.addEventListener("pointerdown", (event) => {
   patternTouchStartX = event.clientX;
