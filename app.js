@@ -51,6 +51,7 @@ const maxVisiblePatternRows = 18;
 const minVisiblePatternRows = 8;
 const minPatternRowHeight = 22;
 const defaultVolume = 48;
+const cellDragDelay = 420;
 const patterns = [createPattern(defaultPatternRows)];
 
 let pattern = patterns[0].cells;
@@ -69,6 +70,9 @@ let patternTouchLastX = 0;
 let patternTouchLastY = 0;
 let patternDidSwipe = false;
 let patternHandledTap = false;
+let cellDragTimer;
+let draggedCell = null;
+let isDraggingCell = false;
 let selectedVolume = defaultVolume;
 let armedNote = null;
 let lastTouchEnd = 0;
@@ -415,7 +419,15 @@ function renderPattern() {
 
     rowCells.forEach((cell, channel) => {
       const span = document.createElement("span");
-      span.className = `pattern-cell${row === activeRow && channel === activeChannel ? " selected" : ""}`;
+      const isSelected = row === activeRow && channel === activeChannel;
+      const isDragSource = draggedCell?.fromRow === row && draggedCell?.fromChannel === channel;
+      const isDragTarget = draggedCell?.targetRow === row && draggedCell?.targetChannel === channel;
+      span.className = [
+        "pattern-cell",
+        isSelected ? "selected" : "",
+        isDragSource ? "drag-source" : "",
+        isDragTarget ? "drag-target" : "",
+      ].filter(Boolean).join(" ");
       span.dataset.channel = channel;
       span.dataset.row = row;
       span.textContent = cell;
@@ -434,6 +446,34 @@ function renderPattern() {
 
     patternGrid.append(rowEl);
   }
+}
+
+function getPatternCellFromPoint(clientX, clientY) {
+  const gridRect = patternGrid.getBoundingClientRect();
+  if (
+    clientX < gridRect.left ||
+    clientX > gridRect.right ||
+    clientY < gridRect.top ||
+    clientY > gridRect.bottom
+  ) {
+    return null;
+  }
+
+  const firstRow = getFirstVisibleRow();
+  const visibleRows = getVisiblePatternRows();
+  const rowOffset = Math.min(
+    visibleRows - 1,
+    Math.max(0, Math.floor(((clientY - gridRect.top) / gridRect.height) * visibleRows)),
+  );
+  const row = Math.min(pattern.length - 1, firstRow + rowOffset);
+  const rowNumberWidth = patternGrid.querySelector(".row-num")?.getBoundingClientRect().width ?? 30;
+  const channelAreaWidth = gridRect.width - rowNumberWidth;
+  const channelX = clientX - gridRect.left - rowNumberWidth;
+  const channel = channelX < 0
+    ? activeChannel
+    : Math.min(3, Math.max(0, Math.floor((channelX / channelAreaWidth) * 4)));
+
+  return { row, channel };
 }
 
 function getVisiblePatternRows() {
@@ -458,32 +498,85 @@ function getFirstVisibleRow() {
 }
 
 function selectPatternCellFromPoint(clientX, clientY) {
+  const cell = getPatternCellFromPoint(clientX, clientY);
+  if (!cell) return false;
+
+  selectPatternCell(cell.row, cell.channel);
+  return true;
+}
+
+function beginCellDrag(row, channel) {
+  const value = pattern[row]?.[channel];
+  if (!value || value === emptyCell) return;
+
+  draggedCell = {
+    fromRow: row,
+    fromChannel: channel,
+    targetRow: row,
+    targetChannel: channel,
+    value,
+  };
+  isDraggingCell = true;
+  patternDidSwipe = true;
+  patternHandledTap = true;
+  activeRow = row;
+  activeChannel = channel;
+  document.body.classList.add("cell-dragging");
+  syncReadouts();
+  renderPattern();
+}
+
+function updateCellDrag(clientX, clientY) {
+  if (!isDraggingCell || !draggedCell) return;
+
   const gridRect = patternGrid.getBoundingClientRect();
-  if (
-    clientX < gridRect.left ||
-    clientX > gridRect.right ||
-    clientY < gridRect.top ||
-    clientY > gridRect.bottom
-  ) {
-    return false;
+  if (clientY < gridRect.top + minPatternRowHeight) {
+    activeRow = Math.max(0, activeRow - 1);
+    renderPattern();
+  } else if (clientY > gridRect.bottom - minPatternRowHeight) {
+    activeRow = Math.min(pattern.length - 1, activeRow + 1);
+    renderPattern();
   }
 
-  const firstRow = getFirstVisibleRow();
-  const visibleRows = getVisiblePatternRows();
-  const rowOffset = Math.min(
-    visibleRows - 1,
-    Math.max(0, Math.floor(((clientY - gridRect.top) / gridRect.height) * visibleRows)),
-  );
-  const row = Math.min(pattern.length - 1, firstRow + rowOffset);
-  const rowNumberWidth = patternGrid.querySelector(".row-num")?.getBoundingClientRect().width ?? 30;
-  const channelAreaWidth = gridRect.width - rowNumberWidth;
-  const channelX = clientX - gridRect.left - rowNumberWidth;
-  const channel = channelX < 0
-    ? activeChannel
-    : Math.min(3, Math.max(0, Math.floor((channelX / channelAreaWidth) * 4)));
+  const target = getPatternCellFromPoint(clientX, clientY);
+  if (!target) return;
 
-  selectPatternCell(row, channel);
-  return true;
+  draggedCell.targetRow = target.row;
+  draggedCell.targetChannel = target.channel;
+  activeRow = target.row;
+  activeChannel = target.channel;
+  syncReadouts();
+  renderPattern();
+}
+
+function finishCellDrag() {
+  if (!isDraggingCell || !draggedCell) return;
+
+  const { fromRow, fromChannel, targetRow, targetChannel, value } = draggedCell;
+  const targetValue = pattern[targetRow][targetChannel];
+  if (fromRow !== targetRow || fromChannel !== targetChannel) {
+    pattern[targetRow][targetChannel] = value;
+    pattern[fromRow][fromChannel] = targetValue === emptyCell ? emptyCell : targetValue;
+  }
+
+  activeRow = targetRow;
+  activeChannel = targetChannel;
+  draggedCell = null;
+  isDraggingCell = false;
+  document.body.classList.remove("cell-dragging");
+  syncReadouts();
+  renderPattern();
+}
+
+function cancelCellDrag() {
+  window.clearTimeout(cellDragTimer);
+  if (!isDraggingCell) return;
+
+  draggedCell = null;
+  isDraggingCell = false;
+  document.body.classList.remove("cell-dragging");
+  syncReadouts();
+  renderPattern();
 }
 
 function selectPatternCell(row, channel) {
@@ -751,6 +844,18 @@ patternGrid.addEventListener("pointerdown", (event) => {
   patternTouchLastY = event.clientY;
   patternDidSwipe = false;
   patternHandledTap = false;
+  window.clearTimeout(cellDragTimer);
+
+  const touchedCell = event.target.closest(".pattern-cell");
+  const touchedRow = Number(touchedCell?.dataset.row);
+  const touchedChannel = Number(touchedCell?.dataset.channel);
+  const touchedValue = pattern[touchedRow]?.[touchedChannel];
+  if (touchedCell && touchedValue && touchedValue !== emptyCell) {
+    cellDragTimer = window.setTimeout(() => {
+      beginCellDrag(touchedRow, touchedChannel);
+    }, cellDragDelay);
+  }
+
   patternGrid.setPointerCapture(event.pointerId);
 });
 
@@ -761,6 +866,20 @@ patternGrid.addEventListener("pointermove", (event) => {
   const deltaY = event.clientY - patternTouchLastY;
   const absX = Math.abs(deltaX);
   const absY = Math.abs(deltaY);
+
+  if (isDraggingCell) {
+    updateCellDrag(event.clientX, event.clientY);
+    patternTouchLastX = event.clientX;
+    patternTouchLastY = event.clientY;
+    return;
+  }
+
+  if (
+    Math.abs(event.clientX - patternTouchStartX) > 10 ||
+    Math.abs(event.clientY - patternTouchStartY) > 10
+  ) {
+    window.clearTimeout(cellDragTimer);
+  }
 
   if (absX >= 26 && absX > absY * 1.2) {
     patternDidSwipe = true;
@@ -780,6 +899,17 @@ patternGrid.addEventListener("pointermove", (event) => {
 
 patternGrid.addEventListener("pointerup", (event) => {
   if (!patternGrid.hasPointerCapture(event.pointerId)) return;
+
+  window.clearTimeout(cellDragTimer);
+  if (isDraggingCell) {
+    updateCellDrag(event.clientX, event.clientY);
+    finishCellDrag();
+    patternGrid.releasePointerCapture(event.pointerId);
+    window.setTimeout(() => {
+      patternDidSwipe = false;
+    }, 0);
+    return;
+  }
 
   const totalDeltaX = event.clientX - patternTouchStartX;
   const totalDeltaY = event.clientY - patternTouchStartY;
@@ -805,6 +935,10 @@ patternGrid.addEventListener("pointerup", (event) => {
   window.setTimeout(() => {
     patternDidSwipe = false;
   }, 0);
+});
+
+patternGrid.addEventListener("pointercancel", () => {
+  cancelCellDrag();
 });
 
 clearCell.addEventListener("click", () => {
