@@ -77,7 +77,7 @@ button {
 
 .top-bar {
   display: grid;
-  grid-template-columns: 42px 1fr 58px;
+  grid-template-columns: 42px 1fr auto 58px;
   align-items: center;
   gap: 9px;
   padding: 7px;
@@ -111,6 +111,15 @@ h1 {
 
 h2 {
   font-size: 14px;
+}
+
+.version-stamp {
+  align-self: start;
+  padding-top: 3px;
+  color: rgba(141, 154, 155, 0.72);
+  font-size: 9px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .status-strip {
