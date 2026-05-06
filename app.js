@@ -32,7 +32,7 @@ const sampleVoices = {
 
 const emptyCell = "--- .. ...";
 const pattern = Array.from({ length: 64 }, () => Array(4).fill(emptyCell));
-const visiblePatternRows = 16;
+const visiblePatternRows = 15;
 const defaultVolume = 48;
 
 let activeRow = 8;
@@ -48,6 +48,7 @@ let patternTouchStartY = 0;
 let patternTouchLastX = 0;
 let patternTouchLastY = 0;
 let patternDidSwipe = false;
+let patternHandledTap = false;
 let selectedVolume = defaultVolume;
 let armedNote = null;
 let audioContext;
@@ -387,24 +388,26 @@ function renderPattern() {
       span.textContent = cell;
       span.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (patternDidSwipe) return;
-        activeRow = row;
-        activeChannel = channel;
-        syncReadouts();
-        renderPattern();
+        if (patternDidSwipe || patternHandledTap) return;
+        selectPatternCell(row, channel);
       });
       rowEl.append(span);
     });
 
     rowEl.addEventListener("click", () => {
-      if (patternDidSwipe) return;
-      activeRow = row;
-      syncReadouts();
-      renderPattern();
+      if (patternDidSwipe || patternHandledTap) return;
+      selectPatternCell(row, activeChannel);
     });
 
     patternGrid.append(rowEl);
   }
+}
+
+function selectPatternCell(row, channel) {
+  activeRow = row;
+  activeChannel = channel;
+  syncReadouts();
+  renderPattern();
 }
 
 function moveRows(delta) {
@@ -569,6 +572,7 @@ patternGrid.addEventListener("pointerdown", (event) => {
   patternTouchLastX = event.clientX;
   patternTouchLastY = event.clientY;
   patternDidSwipe = false;
+  patternHandledTap = false;
   patternGrid.setPointerCapture(event.pointerId);
 });
 
@@ -609,6 +613,12 @@ patternGrid.addEventListener("pointerup", (event) => {
   } else if (absTotalY > 52 && absTotalY > absTotalX) {
     patternDidSwipe = true;
     moveRows(totalDeltaY > 0 ? -2 : 2);
+  } else if (!patternDidSwipe && absTotalX < 10 && absTotalY < 10) {
+    const tappedCell = event.target.closest(".pattern-cell");
+    if (tappedCell) {
+      patternHandledTap = true;
+      selectPatternCell(Number(tappedCell.dataset.row), Number(tappedCell.dataset.channel));
+    }
   }
 
   patternGrid.releasePointerCapture(event.pointerId);
