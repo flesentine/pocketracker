@@ -53,7 +53,7 @@ let patternHandledTap = false;
 let selectedVolume = defaultVolume;
 let armedNote = null;
 let lastTouchEnd = 0;
-let notePointerHandled = false;
+let ignoreNextNoteClick = false;
 let audioContext;
 let noiseBuffer;
 
@@ -583,19 +583,17 @@ editorNoteGrid.addEventListener("pointerdown", (event) => {
   if (!button) return;
 
   event.preventDefault();
-  notePointerHandled = true;
+  ignoreNextNoteClick = true;
   handleNoteInput(button);
-  window.setTimeout(() => {
-    notePointerHandled = false;
-  }, 350);
 });
 
 editorNoteGrid.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
 
-  if (notePointerHandled) {
+  if (ignoreNextNoteClick) {
     event.preventDefault();
+    ignoreNextNoteClick = false;
     return;
   }
 
