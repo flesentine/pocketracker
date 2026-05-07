@@ -60,6 +60,7 @@ const sequenceDragAutoScrollEdge = 28;
 const sequenceDragAutoScrollAmount = 32;
 const patterns = [createPattern(defaultPatternRows)];
 const patternSequence = [0, null];
+let nextPatternRows = defaultPatternRows;
 
 let pattern = patterns[0].cells;
 let activePatternIndex = 0;
@@ -71,7 +72,7 @@ let bpm = 126;
 let selectedSample = "03";
 let isPlaying = false;
 let isDemoLoaded = false;
-let isPatternLooping = false;
+let isPatternLooping = true;
 let timer;
 let patternTouchStartX = 0;
 let patternTouchStartY = 0;
@@ -1141,13 +1142,14 @@ function switchPattern(index) {
 }
 
 function addPattern() {
-  patterns.push(createPattern(defaultPatternRows));
+  patterns.push(createPattern(nextPatternRows));
   normalizeSequence();
   switchPattern(patterns.length - 1);
 }
 
 function resizePattern(rowCount) {
   const nextRows = Math.min(maxPatternRows, Math.max(minPatternRows, rowCount));
+  nextPatternRows = nextRows;
   const activePattern = patterns[activePatternIndex];
   if (nextRows === activePattern.cells.length) return;
 
