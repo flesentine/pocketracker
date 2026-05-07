@@ -145,7 +145,7 @@ h2 {
 
 .pattern-toolbar {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 36px 46px 36px minmax(0, 1fr) 36px;
+  grid-template-columns: 36px minmax(0, 1fr) 36px 46px 36px minmax(0, 1fr) 36px 48px;
   gap: 5px;
 }
 
@@ -217,6 +217,11 @@ h2 {
   overflow-y: auto;
 }
 
+.pattern-bank.remove-target {
+  border-color: rgba(255, 107, 93, 0.55);
+  background: rgba(255, 107, 93, 0.08);
+}
+
 .sequence-slot {
   min-height: 32px;
   display: grid;
@@ -234,6 +239,10 @@ h2 {
 .bank-pattern strong {
   color: var(--text);
   font-size: 12px;
+}
+
+.sequence-slot strong {
+  text-align: left;
 }
 
 .sequence-slot.filled {
@@ -270,6 +279,12 @@ h2 {
 .bank-pattern.queued {
   border-color: var(--cyan);
   color: var(--cyan);
+}
+
+.loop-toggle.looping {
+  border-color: var(--lime);
+  color: var(--lime);
+  background: rgba(166, 233, 87, 0.09);
 }
 
 .sequencing-drag .sequence-slot,

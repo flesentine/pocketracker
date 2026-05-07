@@ -15,6 +15,7 @@ const patternNext = document.querySelector("#patternNext");
 const patternAdd = document.querySelector("#patternAdd");
 const rowsDown = document.querySelector("#rowsDown");
 const rowsUp = document.querySelector("#rowsUp");
+const patternLoopToggle = document.querySelector("#patternLoopToggle");
 const sequenceLane = document.querySelector("#sequenceLane");
 const patternBank = document.querySelector("#patternBank");
 const sampleDeck = document.querySelector(".sample-deck");
@@ -69,6 +70,7 @@ let bpm = 126;
 let selectedSample = "03";
 let isPlaying = false;
 let isDemoLoaded = false;
+let isPatternLooping = false;
 let timer;
 let patternTouchStartX = 0;
 let patternTouchStartY = 0;
@@ -408,6 +410,11 @@ function findSequenceStepForPattern(patternIndex) {
 }
 
 function advanceSequencedPattern() {
+  if (isPatternLooping) {
+    activeRow = 0;
+    return;
+  }
+
   const playable = getPlayableSequence();
   if (playable.length === 0) {
     activeRow = 0;
@@ -444,8 +451,8 @@ function startPlayback(fromBeginning = false) {
   clearTimeout(timer);
   isPlaying = true;
   if (fromBeginning) {
-    const playable = getPlayableSequence();
-    if (playable.length > 0) {
+    const playable = isPatternLooping ? [] : getPlayableSequence();
+    if (!isPatternLooping && playable.length > 0) {
       setActivePattern(playable[0].patternIndex, {
         resetRow: true,
         sequenceStep: playable[0].step,
@@ -525,6 +532,10 @@ function renderSequencer() {
   normalizeSequence();
   sequenceLane.innerHTML = "";
   patternBank.innerHTML = "";
+  patternBank.classList.toggle("remove-target", Boolean(sequenceDrag?.removeTarget));
+  patternLoopToggle.textContent = isPatternLooping ? "Loop" : "Song";
+  patternLoopToggle.classList.toggle("looping", isPatternLooping);
+  patternLoopToggle.setAttribute("aria-pressed", isPatternLooping.toString());
 
   patternSequence.forEach((patternIndex, step) => {
     const slot = document.createElement("button");
@@ -538,7 +549,7 @@ function renderSequencer() {
     slot.type = "button";
     slot.dataset.step = step;
     slot.innerHTML = isFilled
-      ? `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>P${(patternIndex + 1).toString().padStart(2, "0")}</strong>`
+      ? `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>PATTERN ${(patternIndex + 1).toString().padStart(2, "0")}</strong>`
       : `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>...</strong>`;
     slot.setAttribute("aria-label", isFilled
       ? `Sequence step ${step + 1}, pattern ${patternIndex + 1}`
@@ -632,6 +643,34 @@ function getSequenceStepFromPoint(clientX, clientY) {
   return Number(target.dataset.step);
 }
 
+function isPatternBankPoint(clientX, clientY) {
+  const rect = patternBank.getBoundingClientRect();
+  return (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
+}
+
+function syncActiveSequenceAfterEdit() {
+  const currentStepPattern = patternSequence[activeSequenceStep];
+  if (Number.isInteger(currentStepPattern) && patterns[currentStepPattern]) {
+    return;
+  }
+
+  const matchingStep = patternSequence.findIndex((item) => item === activePatternIndex);
+  if (matchingStep >= 0) {
+    activeSequenceStep = matchingStep;
+    return;
+  }
+
+  const playable = getPlayableSequence();
+  if (playable.length > 0) {
+    activeSequenceStep = playable[0].step;
+  }
+}
+
 function beginSequenceDrag(patternIndex, sourceStep = null) {
   if (!Number.isInteger(patternIndex) || !patterns[patternIndex]) return;
 
@@ -639,6 +678,7 @@ function beginSequenceDrag(patternIndex, sourceStep = null) {
     patternIndex,
     sourceStep,
     targetStep: sourceStep,
+    removeTarget: false,
   };
   document.body.classList.add("sequencing-drag");
   renderSequencer();
@@ -647,10 +687,13 @@ function beginSequenceDrag(patternIndex, sourceStep = null) {
 function updateSequenceDrag(clientX, clientY) {
   if (!sequenceDrag) return;
 
+  const removeTarget = sequenceDrag.sourceStep !== null && isPatternBankPoint(clientX, clientY);
   const targetStep = getSequenceStepFromPoint(clientX, clientY);
-  if (targetStep === null || targetStep === sequenceDrag.targetStep) return;
+  if (targetStep === null && !removeTarget && !sequenceDrag.removeTarget) return;
+  if (targetStep === sequenceDrag.targetStep && removeTarget === sequenceDrag.removeTarget) return;
 
   sequenceDrag.targetStep = targetStep;
+  sequenceDrag.removeTarget = removeTarget;
   renderSequencer();
 }
 
@@ -658,7 +701,11 @@ function finishSequenceDrag() {
   if (!sequenceDrag) return;
 
   const { patternIndex, sourceStep, targetStep } = sequenceDrag;
-  if (targetStep !== null) {
+  if (sequenceDrag.removeTarget && sourceStep !== null) {
+    patternSequence[sourceStep] = null;
+    normalizeSequence();
+    syncActiveSequenceAfterEdit();
+  } else if (targetStep !== null) {
     if (sourceStep !== null && sourceStep !== targetStep) {
       patternSequence[sourceStep] = null;
     }
@@ -969,6 +1016,10 @@ patternNext.addEventListener("click", () => switchPattern(activePatternIndex + 1
 patternAdd.addEventListener("click", addPattern);
 rowsDown.addEventListener("click", () => resizePattern(pattern.length - rowStep));
 rowsUp.addEventListener("click", () => resizePattern(pattern.length + rowStep));
+patternLoopToggle.addEventListener("click", () => {
+  isPatternLooping = !isPatternLooping;
+  renderSequencer();
+});
 
 patternToggleButton.addEventListener("click", togglePatternControls);
 patternTitleToggle.addEventListener("click", togglePatternControls);
