@@ -87,6 +87,7 @@ let draggedCell = null;
 let isDraggingCell = false;
 let sequenceDrag = null;
 let queuedPatternForSequence = null;
+let sequenceGhost = null;
 let selectedVolume = defaultVolume;
 let armedNote = null;
 let lastTouchEnd = 0;
@@ -567,7 +568,7 @@ function renderSequencer() {
     ].filter(Boolean).join(" ");
     pad.type = "button";
     pad.dataset.pattern = index;
-    pad.innerHTML = `<strong>${(index + 1).toString().padStart(2, "0")}</strong><span>${item.cells.length}</span>`;
+    pad.innerHTML = `<strong>PATTERN ${(index + 1).toString().padStart(2, "0")}</strong><span>${item.cells.length}</span>`;
     pad.setAttribute("aria-label", `Pattern ${index + 1}`);
     patternBank.append(pad);
   });
@@ -672,7 +673,28 @@ function syncActiveSequenceAfterEdit() {
   }
 }
 
-function beginSequenceDrag(patternIndex, sourceStep = null) {
+function moveSequenceGhost(clientX, clientY) {
+  if (!sequenceGhost) return;
+
+  sequenceGhost.style.left = `${clientX}px`;
+  sequenceGhost.style.top = `${clientY}px`;
+}
+
+function showSequenceGhost(patternIndex, clientX, clientY) {
+  sequenceGhost?.remove();
+  sequenceGhost = document.createElement("div");
+  sequenceGhost.className = "sequence-ghost";
+  sequenceGhost.textContent = `PATTERN ${(patternIndex + 1).toString().padStart(2, "0")}`;
+  document.body.append(sequenceGhost);
+  moveSequenceGhost(clientX, clientY);
+}
+
+function hideSequenceGhost() {
+  sequenceGhost?.remove();
+  sequenceGhost = null;
+}
+
+function beginSequenceDrag(patternIndex, sourceStep = null, clientX = 0, clientY = 0) {
   if (!Number.isInteger(patternIndex) || !patterns[patternIndex]) return;
 
   sequenceDrag = {
@@ -682,11 +704,13 @@ function beginSequenceDrag(patternIndex, sourceStep = null) {
     removeTarget: false,
   };
   document.body.classList.add("sequencing-drag");
+  showSequenceGhost(patternIndex, clientX, clientY);
   renderSequencer();
 }
 
 function updateSequenceDrag(clientX, clientY) {
   if (!sequenceDrag) return;
+  moveSequenceGhost(clientX, clientY);
 
   const laneRect = sequenceLane.getBoundingClientRect();
   if (clientY < laneRect.top + sequenceDragAutoScrollEdge) {
@@ -730,12 +754,14 @@ function finishSequenceDrag() {
     switchPattern(patternIndex);
     sequenceDrag = null;
     document.body.classList.remove("sequencing-drag");
+    hideSequenceGhost();
     renderSequencer();
     return;
   }
 
   sequenceDrag = null;
   document.body.classList.remove("sequencing-drag");
+  hideSequenceGhost();
   syncReadouts();
   renderPattern();
   renderSequencer();
@@ -745,6 +771,7 @@ function cancelSequenceDrag() {
   sequenceDrag = null;
   queuedPatternForSequence = null;
   document.body.classList.remove("sequencing-drag");
+  hideSequenceGhost();
   renderSequencer();
 }
 
@@ -1094,10 +1121,10 @@ patternControls.addEventListener("pointerdown", (event) => {
   if (!bankPad && !sequenceSlot) return;
 
   if (bankPad) {
-    beginSequenceDrag(Number(bankPad.dataset.pattern));
+    beginSequenceDrag(Number(bankPad.dataset.pattern), null, event.clientX, event.clientY);
   } else {
     const sourceStep = Number(sequenceSlot.dataset.step);
-    beginSequenceDrag(patternSequence[sourceStep], sourceStep);
+    beginSequenceDrag(patternSequence[sourceStep], sourceStep, event.clientX, event.clientY);
   }
   patternControls.setPointerCapture(event.pointerId);
 });
