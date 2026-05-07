@@ -145,7 +145,7 @@ h2 {
 
 .pattern-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) 54px 42px minmax(0, 1fr) 42px 52px;
+  grid-template-columns: minmax(0, 1fr) 58px minmax(0, 1fr) 42px;
   gap: 5px;
 }
 
@@ -163,7 +163,8 @@ h2 {
   font-size: 11px;
 }
 
-.pattern-toolbar div {
+.pattern-toolbar div,
+.rows-select {
   min-width: 0;
   display: grid;
   place-items: center;
@@ -180,6 +181,22 @@ h2 {
 .pattern-toolbar strong {
   color: var(--cyan);
   font-size: 13px;
+}
+
+.rows-menu {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.rows-option {
+  min-height: 30px;
+}
+
+.rows-option.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: rgba(71, 215, 198, 0.11);
 }
 
 .sequence-builder {
@@ -343,6 +360,11 @@ h2 {
   border-color: var(--lime);
   color: var(--lime);
   background: rgba(166, 233, 87, 0.09);
+}
+
+.loop-toggle {
+  font-size: 17px;
+  line-height: 1;
 }
 
 .sequencing-drag .sequence-slot,

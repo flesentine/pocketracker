@@ -11,8 +11,8 @@ const patternControls = document.querySelector("#patternControls");
 const patternToggleButton = document.querySelector("#patternToggleButton");
 const patternTitleToggle = document.querySelector("#patternTitleToggle");
 const patternAdd = document.querySelector("#patternAdd");
-const rowsDown = document.querySelector("#rowsDown");
-const rowsUp = document.querySelector("#rowsUp");
+const rowsSelect = document.querySelector("#rowsSelect");
+const rowsMenu = document.querySelector("#rowsMenu");
 const patternLoopToggle = document.querySelector("#patternLoopToggle");
 const sequenceLane = document.querySelector("#sequenceLane");
 const patternBank = document.querySelector("#patternBank");
@@ -534,9 +534,12 @@ function renderSequencer() {
   sequenceLane.innerHTML = "";
   patternBank.innerHTML = "";
   patternBank.classList.toggle("remove-target", Boolean(sequenceDrag?.removeTarget));
-  patternLoopToggle.textContent = isPatternLooping ? "Loop" : "Song";
+  patternLoopToggle.textContent = isPatternLooping ? "↻•" : "↻";
   patternLoopToggle.classList.toggle("looping", isPatternLooping);
   patternLoopToggle.setAttribute("aria-pressed", isPatternLooping.toString());
+  patternLoopToggle.setAttribute("aria-label", isPatternLooping
+    ? "Loop current pattern"
+    : "Loop full sequence");
 
   patternSequence.forEach((patternIndex, step) => {
     const isFilled = Number.isInteger(patternIndex);
@@ -900,6 +903,9 @@ function syncReadouts() {
   patternReadout.textContent = (activePatternIndex + 1).toString().padStart(2, "0");
   patternLabel.textContent = `Pattern ${(activePatternIndex + 1).toString().padStart(2, "0")}`;
   rowsReadout.textContent = pattern.length.toString();
+  if (!rowsMenu.hidden) {
+    renderRowsMenu();
+  }
   rowReadout.textContent = formatRow(activeRow);
   channelReadout.textContent = (activeChannel + 1).toString().padStart(2, "0");
   octaveReadout.textContent = octave.toString().padStart(2, "0");
@@ -1045,8 +1051,24 @@ function togglePatternControls() {
   const label = patternControls.hidden ? "Open pattern controls" : "Close pattern controls";
   patternToggleButton.setAttribute("aria-label", label);
   patternTitleToggle.setAttribute("aria-label", label);
+  if (patternControls.hidden) {
+    rowsMenu.hidden = true;
+  }
   renderPattern();
   renderSequencer();
+}
+
+function renderRowsMenu() {
+  rowsMenu.innerHTML = "";
+  for (let rows = minPatternRows; rows <= maxPatternRows; rows += rowStep) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = `rows-option${rows === pattern.length ? " active" : ""}`;
+    option.dataset.rows = rows;
+    option.textContent = rows.toString();
+    option.setAttribute("aria-label", `${rows} rows`);
+    rowsMenu.append(option);
+  }
 }
 
 sampleDeck.addEventListener("click", (event) => {
@@ -1058,8 +1080,17 @@ sampleDeck.addEventListener("click", (event) => {
 });
 
 patternAdd.addEventListener("click", addPattern);
-rowsDown.addEventListener("click", () => resizePattern(pattern.length - rowStep));
-rowsUp.addEventListener("click", () => resizePattern(pattern.length + rowStep));
+rowsSelect.addEventListener("click", () => {
+  renderRowsMenu();
+  rowsMenu.hidden = !rowsMenu.hidden;
+});
+rowsMenu.addEventListener("click", (event) => {
+  const option = event.target.closest(".rows-option");
+  if (!option) return;
+
+  resizePattern(Number(option.dataset.rows));
+  rowsMenu.hidden = true;
+});
 patternLoopToggle.addEventListener("click", () => {
   isPatternLooping = !isPatternLooping;
   renderSequencer();
@@ -1126,8 +1157,8 @@ patternControls.addEventListener("pointerdown", (event) => {
   if (!bankPad && !sequenceSlot) return;
   const sequenceRect = sequenceLane.getBoundingClientRect();
   const bankRect = patternBank.getBoundingClientRect();
-  const isSequenceScrollGutter = event.clientX < sequenceRect.left + 30;
-  const isBankScrollGutter = event.clientX > bankRect.right - 24;
+  const isSequenceScrollGutter = event.clientX < sequenceRect.left + 50;
+  const isBankScrollGutter = event.clientX > bankRect.right - 48;
   if (isSequenceScrollGutter || isBankScrollGutter) return;
 
   if (bankPad) {
