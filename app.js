@@ -16,6 +16,7 @@ const rowsMenu = document.querySelector("#rowsMenu");
 const patternLoopToggle = document.querySelector("#patternLoopToggle");
 const sequenceLane = document.querySelector("#sequenceLane");
 const patternBank = document.querySelector("#patternBank");
+const channelHeaderButtons = document.querySelectorAll(".channel-head button[data-channel]");
 const sampleDeck = document.querySelector(".sample-deck");
 const editorNoteGrid = document.querySelector("#editorNoteGrid");
 const volumeSlider = document.querySelector("#volumeSlider");
@@ -92,7 +93,9 @@ let lastTouchEnd = 0;
 let ignoreNextNoteClick = false;
 let ignoreNextPlayClick = false;
 let paneScrollDrag = null;
+let pendingPaneGesture = null;
 let suppressPaneClick = false;
+let mutedChannels = Array(4).fill(false);
 let audioContext;
 let noiseBuffer;
 
@@ -371,6 +374,8 @@ function playCell(cell, when = getAudioContext().currentTime) {
 function playRow(rowIndex) {
   const ctx = getAudioContext();
   pattern[rowIndex].forEach((cell, channelIndex) => {
+    if (mutedChannels[channelIndex]) return;
+
     playCell(cell, ctx.currentTime + channelIndex * 0.006);
   });
 }
@@ -510,6 +515,7 @@ function renderPattern() {
         isSelected ? "selected" : "",
         isDragSource ? "drag-source" : "",
         isDragTarget ? "drag-target" : "",
+        mutedChannels[channel] ? "muted" : "",
       ].filter(Boolean).join(" ");
       span.dataset.channel = channel;
       span.dataset.row = row;
@@ -603,6 +609,15 @@ function updateScrollRail(element, prefix) {
 function updateScrollRails() {
   updateScrollRail(sequenceLane, "sequence");
   updateScrollRail(patternBank, "bank");
+}
+
+function syncChannelMutes() {
+  channelHeaderButtons.forEach((button, index) => {
+    const muted = mutedChannels[index];
+    button.classList.toggle("muted", muted);
+    button.setAttribute("aria-pressed", muted.toString());
+    button.setAttribute("aria-label", `${muted ? "Unmute" : "Mute"} channel ${index + 1}`);
+  });
 }
 
 function scrollPaneBy(element, deltaY) {
@@ -748,6 +763,71 @@ function beginPaneScroll(event) {
   return true;
 }
 
+function beginPendingPaneGesture(event, bankPad, sequenceSlot) {
+  const element = getPaneScrollTarget(event);
+  if (!element) return false;
+
+  pendingPaneGesture = {
+    element,
+    bankPad,
+    sequenceSlot,
+    startX: event.clientX,
+    startY: event.clientY,
+    startScrollTop: element.scrollTop,
+  };
+  suppressPaneClick = true;
+  event.preventDefault();
+  patternControls.setPointerCapture(event.pointerId);
+  return true;
+}
+
+function startPendingPaneScroll() {
+  if (!pendingPaneGesture) return;
+
+  paneScrollDrag = {
+    element: pendingPaneGesture.element,
+    startY: pendingPaneGesture.startY,
+    startScrollTop: pendingPaneGesture.startScrollTop,
+  };
+  pendingPaneGesture = null;
+}
+
+function startPendingSequenceDrag(clientX, clientY) {
+  if (!pendingPaneGesture) return false;
+
+  if (pendingPaneGesture.bankPad) {
+    beginSequenceDrag(Number(pendingPaneGesture.bankPad.dataset.pattern), null, clientX, clientY);
+  } else if (pendingPaneGesture.sequenceSlot) {
+    const sourceStep = Number(pendingPaneGesture.sequenceSlot.dataset.step);
+    beginSequenceDrag(patternSequence[sourceStep], sourceStep, clientX, clientY);
+  } else {
+    return false;
+  }
+
+  pendingPaneGesture = null;
+  suppressPaneClick = false;
+  return true;
+}
+
+function updatePendingPaneGesture(event) {
+  if (!pendingPaneGesture) return false;
+
+  const dx = event.clientX - pendingPaneGesture.startX;
+  const dy = event.clientY - pendingPaneGesture.startY;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  if (Math.max(absX, absY) < 8) return true;
+
+  if (absX > absY && startPendingSequenceDrag(event.clientX, event.clientY)) {
+    updateSequenceDrag(event.clientX, event.clientY);
+    return true;
+  }
+
+  startPendingPaneScroll();
+  updatePaneScroll(event.clientY);
+  return true;
+}
+
 function updatePaneScroll(clientY) {
   if (!paneScrollDrag) return;
 
@@ -757,6 +837,7 @@ function updatePaneScroll(clientY) {
 
 function finishPaneScroll() {
   paneScrollDrag = null;
+  pendingPaneGesture = null;
   window.setTimeout(() => {
     suppressPaneClick = false;
   }, 0);
@@ -822,8 +903,10 @@ function updateSequenceDrag(clientX, clientY) {
   const laneRect = sequenceLane.getBoundingClientRect();
   if (clientY < laneRect.top + sequenceDragAutoScrollEdge) {
     sequenceLane.scrollTop -= sequenceDragAutoScrollAmount;
+    updateScrollRails();
   } else if (clientY > laneRect.bottom - sequenceDragAutoScrollEdge) {
     sequenceLane.scrollTop += sequenceDragAutoScrollAmount;
+    updateScrollRails();
   }
 
   const removeTarget = sequenceDrag.sourceStep !== null && isPatternBankPoint(clientX, clientY);
@@ -1193,6 +1276,15 @@ patternLoopToggle.addEventListener("click", () => {
   renderSequencer();
 });
 
+channelHeaderButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const channel = Number(button.dataset.channel);
+    mutedChannels[channel] = !mutedChannels[channel];
+    syncChannelMutes();
+    renderPattern();
+  });
+});
+
 patternToggleButton.addEventListener("click", togglePatternControls);
 patternTitleToggle.addEventListener("click", togglePatternControls);
 patternTitleToggle.addEventListener("keydown", (event) => {
@@ -1249,10 +1341,11 @@ sequenceLane.addEventListener("click", (event) => {
 });
 
 patternControls.addEventListener("pointerdown", (event) => {
-  if (beginPaneScroll(event)) return;
-
   const bankPad = event.target.closest(".bank-pattern");
   const sequenceSlot = event.target.closest(".sequence-slot.filled");
+
+  if (beginPendingPaneGesture(event, bankPad, sequenceSlot)) return;
+
   if (!bankPad && !sequenceSlot) return;
   const sequenceRect = sequenceLane.getBoundingClientRect();
   const bankRect = patternBank.getBoundingClientRect();
@@ -1277,6 +1370,11 @@ patternControls.addEventListener("pointerdown", (event) => {
 });
 
 patternControls.addEventListener("pointermove", (event) => {
+  if (pendingPaneGesture && patternControls.hasPointerCapture(event.pointerId)) {
+    updatePendingPaneGesture(event);
+    return;
+  }
+
   if (paneScrollDrag && patternControls.hasPointerCapture(event.pointerId)) {
     updatePaneScroll(event.clientY);
     return;
@@ -1288,6 +1386,12 @@ patternControls.addEventListener("pointermove", (event) => {
 });
 
 patternControls.addEventListener("pointerup", (event) => {
+  if (pendingPaneGesture && patternControls.hasPointerCapture(event.pointerId)) {
+    finishPaneScroll();
+    patternControls.releasePointerCapture(event.pointerId);
+    return;
+  }
+
   if (paneScrollDrag && patternControls.hasPointerCapture(event.pointerId)) {
     updatePaneScroll(event.clientY);
     finishPaneScroll();
@@ -1308,6 +1412,11 @@ patternControls.addEventListener("pointercancel", () => {
 });
 
 document.addEventListener("pointermove", (event) => {
+  if (pendingPaneGesture) {
+    updatePendingPaneGesture(event);
+    return;
+  }
+
   if (paneScrollDrag) {
     updatePaneScroll(event.clientY);
     return;
@@ -1319,6 +1428,11 @@ document.addEventListener("pointermove", (event) => {
 });
 
 document.addEventListener("pointerup", (event) => {
+  if (pendingPaneGesture) {
+    finishPaneScroll();
+    return;
+  }
+
   if (paneScrollDrag) {
     updatePaneScroll(event.clientY);
     finishPaneScroll();
@@ -1558,5 +1672,6 @@ playButton.addEventListener("click", (event) => {
 });
 
 syncReadouts();
+syncChannelMutes();
 renderPattern();
 renderSequencer();

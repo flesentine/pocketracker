@@ -26,7 +26,7 @@
       content="A pocket-sized old-school tracker for making patterns with synth drums, bass, leads, and piano-style note entry."
     />
     <meta name="twitter:image" content="https://flesentine.github.io/pocketracker/og-image.png?v=20260506-11" />
-    <link rel="stylesheet" href="./styles.css?v=20260507-6" />
+    <link rel="stylesheet" href="./styles.css?v=20260507-7" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Pocket tracker prototype">
@@ -36,7 +36,7 @@
           <p class="eyebrow">Pattern 01</p>
           <h1>Pocket Tracker</h1>
         </div>
-        <span class="version-stamp" aria-label="Build version">v2026.05.07.6</span>
+        <span class="version-stamp" aria-label="Build version">v2026.05.07.7</span>
         <button class="icon-button" id="demoButton" aria-label="Load demo song">Demo</button>
       </header>
 
@@ -82,10 +82,10 @@
       <section class="pattern-panel" aria-label="Pattern editor">
         <div class="channel-head">
           <span></span>
-          <span>CH 1</span>
-          <span>CH 2</span>
-          <span>CH 3</span>
-          <span>CH 4</span>
+          <button data-channel="0" aria-pressed="false">CH 1</button>
+          <button data-channel="1" aria-pressed="false">CH 2</button>
+          <button data-channel="2" aria-pressed="false">CH 3</button>
+          <button data-channel="3" aria-pressed="false">CH 4</button>
         </div>
         <div class="pattern-grid" id="patternGrid"></div>
       </section>
@@ -140,6 +140,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260507-6"></script>
+    <script src="./app.js?v=20260507-7"></script>
   </body>
 </html>
