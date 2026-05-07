@@ -92,6 +92,7 @@ let selectedVolume = defaultVolume;
 let armedNote = null;
 let lastTouchEnd = 0;
 let ignoreNextNoteClick = false;
+let ignoreNextPlayClick = false;
 let audioContext;
 let noiseBuffer;
 
@@ -547,6 +548,7 @@ function renderSequencer() {
       isFilled ? "filled" : "",
       step === activeSequenceStep && isFilled ? "active" : "",
       sequenceDrag?.targetStep === step ? "drop-target" : "",
+      sequenceDrag?.targetStep === step ? "insert-target" : "",
     ].filter(Boolean).join(" ");
     slot.type = "button";
     slot.dataset.step = step;
@@ -1119,6 +1121,11 @@ patternControls.addEventListener("pointerdown", (event) => {
   const bankPad = event.target.closest(".bank-pattern");
   const sequenceSlot = event.target.closest(".sequence-slot.filled");
   if (!bankPad && !sequenceSlot) return;
+  const sequenceRect = sequenceLane.getBoundingClientRect();
+  const bankRect = patternBank.getBoundingClientRect();
+  const isSequenceScrollGutter = event.clientX < sequenceRect.left + 30;
+  const isBankScrollGutter = event.clientX > bankRect.right - 24;
+  if (isSequenceScrollGutter || isBankScrollGutter) return;
 
   if (bankPad) {
     beginSequenceDrag(Number(bankPad.dataset.pattern), null, event.clientX, event.clientY);
@@ -1349,12 +1356,28 @@ tempoDone.addEventListener("click", hideTempoPanel);
 
 window.addEventListener("resize", renderPattern);
 
-playButton.addEventListener("click", () => {
+function togglePlayback() {
   if (isPlaying) {
     stopPlayback();
   } else {
     startPlayback(true);
   }
+}
+
+playButton.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  ignoreNextPlayClick = true;
+  togglePlayback();
+});
+
+playButton.addEventListener("click", (event) => {
+  if (ignoreNextPlayClick) {
+    event.preventDefault();
+    ignoreNextPlayClick = false;
+    return;
+  }
+
+  togglePlayback();
 });
 
 syncReadouts();
