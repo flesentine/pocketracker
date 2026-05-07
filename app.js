@@ -542,6 +542,7 @@ function renderSequencer() {
   sequenceLane.innerHTML = "";
   patternBank.innerHTML = "";
   patternBank.classList.toggle("remove-target", Boolean(sequenceDrag?.removeTarget));
+  patternLoopToggle.hidden = patterns.length <= 1;
   patternLoopToggle.textContent = isPatternLooping ? "↻•" : "↻";
   patternLoopToggle.classList.toggle("looping", isPatternLooping);
   patternLoopToggle.setAttribute("aria-pressed", isPatternLooping.toString());
