@@ -218,35 +218,35 @@ h2 {
 .sequence-lane {
   grid-template-columns: 1fr;
   max-height: 178px;
-  overflow-y: auto;
+  overflow-y: hidden;
   padding: 6px 6px 6px 8px;
   overscroll-behavior-y: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-color: rgba(71, 215, 198, 0.58) rgba(255, 255, 255, 0.06);
-  scrollbar-width: thin;
+  touch-action: none;
+  scrollbar-width: none;
   background:
-    linear-gradient(rgba(71, 215, 198, 0.58), rgba(71, 215, 198, 0.58)) 3px 50% / 4px 64px no-repeat,
+    linear-gradient(rgba(71, 215, 198, 0.58), rgba(71, 215, 198, 0.58)) 3px var(--sequence-scroll-top, 6px) / 4px var(--sequence-scroll-size, 64px) no-repeat,
     rgba(16, 19, 22, 0.65);
 }
 
 .sequence-lane::-webkit-scrollbar {
-  width: 5px;
-}
-
-.sequence-lane::-webkit-scrollbar-thumb {
-  background: rgba(71, 215, 198, 0.58);
+  display: none;
 }
 
 .pattern-bank {
   grid-template-columns: 1fr;
   max-height: 178px;
-  overflow-y: auto;
+  overflow-y: hidden;
   padding: 6px 10px 6px 6px;
   overscroll-behavior-y: contain;
-  -webkit-overflow-scrolling: touch;
+  touch-action: none;
+  scrollbar-width: none;
   background:
-    linear-gradient(rgba(141, 154, 155, 0.58), rgba(141, 154, 155, 0.58)) calc(100% - 4px) 50% / 4px 64px no-repeat,
+    linear-gradient(rgba(141, 154, 155, 0.58), rgba(141, 154, 155, 0.58)) calc(100% - 4px) var(--bank-scroll-top, 6px) / 4px var(--bank-scroll-size, 64px) no-repeat,
     rgba(16, 19, 22, 0.65);
+}
+
+.pattern-bank::-webkit-scrollbar {
+  display: none;
 }
 
 .pattern-bank.remove-target {

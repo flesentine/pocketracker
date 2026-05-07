@@ -91,6 +91,8 @@ let armedNote = null;
 let lastTouchEnd = 0;
 let ignoreNextNoteClick = false;
 let ignoreNextPlayClick = false;
+let paneScrollDrag = null;
+let suppressPaneClick = false;
 let audioContext;
 let noiseBuffer;
 
@@ -582,6 +584,37 @@ function renderSequencer() {
     pad.setAttribute("aria-label", `Pattern ${index + 1}`);
     patternBank.append(pad);
   });
+  updateScrollRails();
+}
+
+function updateScrollRail(element, prefix) {
+  const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
+  const trackHeight = Math.max(1, element.clientHeight - 12);
+  const thumbSize = maxScroll > 0
+    ? Math.max(34, Math.round((element.clientHeight / element.scrollHeight) * trackHeight))
+    : 0;
+  const thumbTravel = Math.max(0, trackHeight - thumbSize);
+  const thumbTop = 6 + (maxScroll > 0 ? (element.scrollTop / maxScroll) * thumbTravel : 0);
+
+  element.style.setProperty(`--${prefix}-scroll-size`, `${thumbSize}px`);
+  element.style.setProperty(`--${prefix}-scroll-top`, `${thumbTop}px`);
+}
+
+function updateScrollRails() {
+  updateScrollRail(sequenceLane, "sequence");
+  updateScrollRail(patternBank, "bank");
+}
+
+function scrollPaneBy(element, deltaY) {
+  const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
+  if (maxScroll <= 0) return false;
+
+  const nextScrollTop = Math.min(maxScroll, Math.max(0, element.scrollTop + deltaY));
+  if (nextScrollTop === element.scrollTop) return false;
+
+  element.scrollTop = nextScrollTop;
+  updateScrollRails();
+  return true;
 }
 
 function getPatternCellFromPoint(clientX, clientY) {
@@ -663,6 +696,70 @@ function isPatternBankPoint(clientX, clientY) {
     clientY >= rect.top &&
     clientY <= rect.bottom
   );
+}
+
+function getPaneScrollTarget(event) {
+  const sequenceRect = sequenceLane.getBoundingClientRect();
+  const bankRect = patternBank.getBoundingClientRect();
+  const inSequence = (
+    event.clientX >= sequenceRect.left &&
+    event.clientX <= sequenceRect.right &&
+    event.clientY >= sequenceRect.top &&
+    event.clientY <= sequenceRect.bottom
+  );
+  const inBank = (
+    event.clientX >= bankRect.left &&
+    event.clientX <= bankRect.right &&
+    event.clientY >= bankRect.top &&
+    event.clientY <= bankRect.bottom
+  );
+
+  if (
+    inSequence &&
+    event.clientX < sequenceRect.left + 72 &&
+    sequenceLane.scrollHeight > sequenceLane.clientHeight
+  ) {
+    return sequenceLane;
+  }
+
+  if (
+    inBank &&
+    event.clientX > bankRect.right - 68 &&
+    patternBank.scrollHeight > patternBank.clientHeight
+  ) {
+    return patternBank;
+  }
+
+  return null;
+}
+
+function beginPaneScroll(event) {
+  const element = getPaneScrollTarget(event);
+  if (!element) return false;
+
+  paneScrollDrag = {
+    element,
+    startY: event.clientY,
+    startScrollTop: element.scrollTop,
+  };
+  suppressPaneClick = true;
+  event.preventDefault();
+  patternControls.setPointerCapture(event.pointerId);
+  return true;
+}
+
+function updatePaneScroll(clientY) {
+  if (!paneScrollDrag) return;
+
+  paneScrollDrag.element.scrollTop = paneScrollDrag.startScrollTop - (clientY - paneScrollDrag.startY);
+  updateScrollRails();
+}
+
+function finishPaneScroll() {
+  paneScrollDrag = null;
+  window.setTimeout(() => {
+    suppressPaneClick = false;
+  }, 0);
 }
 
 function syncActiveSequenceAfterEdit() {
@@ -1106,7 +1203,7 @@ patternTitleToggle.addEventListener("keydown", (event) => {
 });
 
 patternBank.addEventListener("click", (event) => {
-  if (sequenceDrag) return;
+  if (sequenceDrag || suppressPaneClick) return;
 
   const pad = event.target.closest(".bank-pattern");
   if (!pad) return;
@@ -1117,7 +1214,7 @@ patternBank.addEventListener("click", (event) => {
 });
 
 sequenceLane.addEventListener("click", (event) => {
-  if (sequenceDrag) return;
+  if (sequenceDrag || suppressPaneClick) return;
 
   const slot = event.target.closest(".sequence-slot, .sequence-end-drop");
   if (!slot) return;
@@ -1152,13 +1249,21 @@ sequenceLane.addEventListener("click", (event) => {
 });
 
 patternControls.addEventListener("pointerdown", (event) => {
+  if (beginPaneScroll(event)) return;
+
   const bankPad = event.target.closest(".bank-pattern");
   const sequenceSlot = event.target.closest(".sequence-slot.filled");
   if (!bankPad && !sequenceSlot) return;
   const sequenceRect = sequenceLane.getBoundingClientRect();
   const bankRect = patternBank.getBoundingClientRect();
-  const isSequenceScrollGutter = event.clientX < sequenceRect.left + 50;
-  const isBankScrollGutter = event.clientX > bankRect.right - 48;
+  const isSequenceScrollGutter = (
+    sequenceLane.scrollHeight > sequenceLane.clientHeight &&
+    event.clientX < sequenceRect.left + 72
+  );
+  const isBankScrollGutter = (
+    patternBank.scrollHeight > patternBank.clientHeight &&
+    event.clientX > bankRect.right - 68
+  );
   if (isSequenceScrollGutter || isBankScrollGutter) return;
 
   if (bankPad) {
@@ -1172,12 +1277,24 @@ patternControls.addEventListener("pointerdown", (event) => {
 });
 
 patternControls.addEventListener("pointermove", (event) => {
+  if (paneScrollDrag && patternControls.hasPointerCapture(event.pointerId)) {
+    updatePaneScroll(event.clientY);
+    return;
+  }
+
   if (!sequenceDrag || !patternControls.hasPointerCapture(event.pointerId)) return;
 
   updateSequenceDrag(event.clientX, event.clientY);
 });
 
 patternControls.addEventListener("pointerup", (event) => {
+  if (paneScrollDrag && patternControls.hasPointerCapture(event.pointerId)) {
+    updatePaneScroll(event.clientY);
+    finishPaneScroll();
+    patternControls.releasePointerCapture(event.pointerId);
+    return;
+  }
+
   if (!sequenceDrag || !patternControls.hasPointerCapture(event.pointerId)) return;
 
   updateSequenceDrag(event.clientX, event.clientY);
@@ -1185,15 +1302,29 @@ patternControls.addEventListener("pointerup", (event) => {
   patternControls.releasePointerCapture(event.pointerId);
 });
 
-patternControls.addEventListener("pointercancel", cancelSequenceDrag);
+patternControls.addEventListener("pointercancel", () => {
+  finishPaneScroll();
+  cancelSequenceDrag();
+});
 
 document.addEventListener("pointermove", (event) => {
+  if (paneScrollDrag) {
+    updatePaneScroll(event.clientY);
+    return;
+  }
+
   if (!sequenceDrag) return;
 
   updateSequenceDrag(event.clientX, event.clientY);
 });
 
 document.addEventListener("pointerup", (event) => {
+  if (paneScrollDrag) {
+    updatePaneScroll(event.clientY);
+    finishPaneScroll();
+    return;
+  }
+
   if (!sequenceDrag) return;
 
   updateSequenceDrag(event.clientX, event.clientY);
@@ -1389,6 +1520,18 @@ bpmUp.addEventListener("click", () => setBpm(bpm + 1));
 tempoDone.addEventListener("click", hideTempoPanel);
 
 window.addEventListener("resize", renderPattern);
+sequenceLane.addEventListener("scroll", updateScrollRails);
+patternBank.addEventListener("scroll", updateScrollRails);
+sequenceLane.addEventListener("wheel", (event) => {
+  if (!scrollPaneBy(sequenceLane, event.deltaY)) return;
+
+  event.preventDefault();
+}, { passive: false });
+patternBank.addEventListener("wheel", (event) => {
+  if (!scrollPaneBy(patternBank, event.deltaY)) return;
+
+  event.preventDefault();
+}, { passive: false });
 
 function togglePlayback() {
   if (isPlaying) {
