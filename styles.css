@@ -196,18 +196,20 @@ h2 {
   gap: 6px;
   align-content: start;
   border: 1px solid rgba(48, 57, 64, 0.85);
-  background: rgba(16, 19, 22, 0.65);
 }
 
 .sequence-lane {
   grid-template-columns: 1fr;
   max-height: 178px;
   overflow-y: auto;
-  padding: 6px 6px 6px 34px;
+  padding: 6px;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-color: rgba(71, 215, 198, 0.58) rgba(255, 255, 255, 0.06);
   scrollbar-width: thin;
+  background:
+    linear-gradient(rgba(71, 215, 198, 0.58), rgba(71, 215, 198, 0.58)) 4px 50% / 4px 64px no-repeat,
+    rgba(16, 19, 22, 0.65);
 }
 
 .sequence-lane::-webkit-scrollbar {
@@ -222,9 +224,12 @@ h2 {
   grid-template-columns: 1fr;
   max-height: 178px;
   overflow-y: auto;
-  padding: 6px 26px 6px 6px;
+  padding: 6px 10px 6px 6px;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
+  background:
+    linear-gradient(rgba(141, 154, 155, 0.58), rgba(141, 154, 155, 0.58)) calc(100% - 4px) 50% / 4px 64px no-repeat,
+    rgba(16, 19, 22, 0.65);
 }
 
 .pattern-bank.remove-target {
@@ -232,8 +237,12 @@ h2 {
   background: rgba(255, 107, 93, 0.08);
 }
 
-.sequence-slot {
+.sequence-slot,
+.sequence-end-drop {
   position: relative;
+}
+
+.sequence-slot {
   min-height: 32px;
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr);
@@ -274,18 +283,28 @@ h2 {
 }
 
 .sequence-slot.insert-target {
-  transform: translateY(10px);
+  margin-top: 14px;
 }
 
-.sequence-slot.insert-target::before {
+.sequence-slot.insert-target::before,
+.sequence-end-drop.insert-target::before {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
-  top: -9px;
+  top: -10px;
   height: 3px;
   background: var(--cyan);
   box-shadow: 0 0 12px rgba(71, 215, 198, 0.45);
+}
+
+.sequence-end-drop {
+  min-height: 10px;
+}
+
+.sequence-end-drop.insert-target {
+  min-height: 24px;
+  margin-top: 12px;
 }
 
 .bank-pattern {
@@ -294,7 +313,7 @@ h2 {
   grid-template-columns: 1fr;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 5px 12px 5px 8px;
   color: var(--muted);
   font-size: 11px;
   touch-action: none;
@@ -303,6 +322,7 @@ h2 {
 .bank-pattern strong {
   text-align: left;
   white-space: nowrap;
+  font-size: 11px;
 }
 
 .bank-pattern span {

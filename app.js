@@ -541,23 +541,30 @@ function renderSequencer() {
   patternLoopToggle.setAttribute("aria-pressed", isPatternLooping.toString());
 
   patternSequence.forEach((patternIndex, step) => {
-    const slot = document.createElement("button");
     const isFilled = Number.isInteger(patternIndex);
+    if (!isFilled) {
+      const dropZone = document.createElement("div");
+      dropZone.className = [
+        "sequence-end-drop",
+        sequenceDrag?.targetStep === step ? "insert-target" : "",
+      ].filter(Boolean).join(" ");
+      dropZone.dataset.step = step;
+      sequenceLane.append(dropZone);
+      return;
+    }
+
+    const slot = document.createElement("button");
     slot.className = [
       "sequence-slot",
-      isFilled ? "filled" : "",
-      step === activeSequenceStep && isFilled ? "active" : "",
+      "filled",
+      step === activeSequenceStep ? "active" : "",
       sequenceDrag?.targetStep === step ? "drop-target" : "",
       sequenceDrag?.targetStep === step ? "insert-target" : "",
     ].filter(Boolean).join(" ");
     slot.type = "button";
     slot.dataset.step = step;
-    slot.innerHTML = isFilled
-      ? `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>PATTERN ${(patternIndex + 1).toString().padStart(2, "0")}</strong>`
-      : `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>...</strong>`;
-    slot.setAttribute("aria-label", isFilled
-      ? `Sequence step ${step + 1}, pattern ${patternIndex + 1}`
-      : `Empty sequence step ${step + 1}`);
+    slot.innerHTML = `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>PATTERN ${(patternIndex + 1).toString().padStart(2, "0")}</strong>`;
+    slot.setAttribute("aria-label", `Sequence step ${step + 1}, pattern ${patternIndex + 1}`);
     sequenceLane.append(slot);
   });
 
@@ -641,7 +648,7 @@ function selectPatternCellFromPoint(clientX, clientY) {
 }
 
 function getSequenceStepFromPoint(clientX, clientY) {
-  const target = document.elementFromPoint(clientX, clientY)?.closest(".sequence-slot");
+  const target = document.elementFromPoint(clientX, clientY)?.closest(".sequence-slot, .sequence-end-drop");
   if (!target || !sequenceLane.contains(target)) return null;
 
   return Number(target.dataset.step);
@@ -1085,7 +1092,7 @@ patternBank.addEventListener("click", (event) => {
 sequenceLane.addEventListener("click", (event) => {
   if (sequenceDrag) return;
 
-  const slot = event.target.closest(".sequence-slot");
+  const slot = event.target.closest(".sequence-slot, .sequence-end-drop");
   if (!slot) return;
 
   const patternIndex = patternSequence[Number(slot.dataset.step)];
