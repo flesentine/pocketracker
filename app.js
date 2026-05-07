@@ -1123,6 +1123,7 @@ patternControls.addEventListener("pointerdown", (event) => {
   if (bankPad) {
     beginSequenceDrag(Number(bankPad.dataset.pattern), null, event.clientX, event.clientY);
   } else {
+    event.preventDefault();
     const sourceStep = Number(sequenceSlot.dataset.step);
     beginSequenceDrag(patternSequence[sourceStep], sourceStep, event.clientX, event.clientY);
   }
