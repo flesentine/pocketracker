@@ -57,6 +57,8 @@ const defaultVolume = 48;
 const cellDragDelay = 420;
 const cellDragAutoScrollEdge = 26;
 const cellDragAutoScrollInterval = 360;
+const sequenceDragAutoScrollEdge = 28;
+const sequenceDragAutoScrollAmount = 32;
 const patterns = [createPattern(defaultPatternRows)];
 const patternSequence = [0, null];
 
@@ -382,18 +384,17 @@ function getPlayableSequence() {
 }
 
 function normalizeSequence() {
-  for (let index = patternSequence.length - 1; index > 0; index -= 1) {
-    if (patternSequence[index] !== null || patternSequence[index - 1] !== null) break;
-    patternSequence.pop();
+  const filled = patternSequence.filter((patternIndex) => (
+    Number.isInteger(patternIndex) && patterns[patternIndex]
+  ));
+
+  patternSequence.length = 0;
+  patternSequence.push(...filled);
+  if (patternSequence.length === 0) {
+    patternSequence.push(0);
   }
 
-  if (patternSequence.length === 0 || patternSequence[0] === null) {
-    patternSequence[0] = 0;
-  }
-
-  if (patternSequence[patternSequence.length - 1] !== null) {
-    patternSequence.push(null);
-  }
+  patternSequence.push(null);
 }
 
 function setActivePattern(index, { resetRow = false, sequenceStep = activeSequenceStep } = {}) {
@@ -687,6 +688,13 @@ function beginSequenceDrag(patternIndex, sourceStep = null) {
 function updateSequenceDrag(clientX, clientY) {
   if (!sequenceDrag) return;
 
+  const laneRect = sequenceLane.getBoundingClientRect();
+  if (clientY < laneRect.top + sequenceDragAutoScrollEdge) {
+    sequenceLane.scrollTop -= sequenceDragAutoScrollAmount;
+  } else if (clientY > laneRect.bottom - sequenceDragAutoScrollEdge) {
+    sequenceLane.scrollTop += sequenceDragAutoScrollAmount;
+  }
+
   const removeTarget = sequenceDrag.sourceStep !== null && isPatternBankPoint(clientX, clientY);
   const targetStep = getSequenceStepFromPoint(clientX, clientY);
   if (targetStep === null && !removeTarget && !sequenceDrag.removeTarget) return;
@@ -702,16 +710,20 @@ function finishSequenceDrag() {
 
   const { patternIndex, sourceStep, targetStep } = sequenceDrag;
   if (sequenceDrag.removeTarget && sourceStep !== null) {
-    patternSequence[sourceStep] = null;
+    patternSequence.splice(sourceStep, 1);
     normalizeSequence();
     syncActiveSequenceAfterEdit();
   } else if (targetStep !== null) {
-    if (sourceStep !== null && sourceStep !== targetStep) {
-      patternSequence[sourceStep] = null;
+    let insertStep = targetStep;
+    if (sourceStep !== null) {
+      patternSequence.splice(sourceStep, 1);
+      if (sourceStep < insertStep) {
+        insertStep -= 1;
+      }
     }
-    patternSequence[targetStep] = patternIndex;
-    activeSequenceStep = targetStep;
-    setActivePattern(patternIndex, { sequenceStep: targetStep });
+    patternSequence.splice(insertStep, 0, patternIndex);
+    activeSequenceStep = insertStep;
+    setActivePattern(patternIndex, { sequenceStep: insertStep });
     normalizeSequence();
   } else if (sourceStep === null) {
     queuedPatternForSequence = patternIndex;
@@ -1049,8 +1061,9 @@ sequenceLane.addEventListener("click", (event) => {
 
   const patternIndex = patternSequence[Number(slot.dataset.step)];
   if (Number.isInteger(queuedPatternForSequence)) {
-    patternSequence[Number(slot.dataset.step)] = queuedPatternForSequence;
-    activeSequenceStep = Number(slot.dataset.step);
+    const insertStep = Number(slot.dataset.step);
+    patternSequence.splice(insertStep, 0, queuedPatternForSequence);
+    activeSequenceStep = insertStep;
     normalizeSequence();
     setActivePattern(queuedPatternForSequence, {
       resetRow: true,

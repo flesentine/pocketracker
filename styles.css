@@ -204,11 +204,18 @@ h2 {
   grid-template-columns: 1fr;
   max-height: 178px;
   overflow-y: auto;
-  scrollbar-width: none;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-color: rgba(71, 215, 198, 0.58) rgba(255, 255, 255, 0.06);
+  scrollbar-width: thin;
 }
 
 .sequence-lane::-webkit-scrollbar {
-  display: none;
+  width: 5px;
+}
+
+.sequence-lane::-webkit-scrollbar-thumb {
+  background: rgba(71, 215, 198, 0.58);
 }
 
 .pattern-bank {
@@ -232,7 +239,7 @@ h2 {
   border-style: dashed;
   color: var(--muted);
   font-size: 10px;
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 .sequence-slot strong,
