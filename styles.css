@@ -145,7 +145,7 @@ h2 {
 
 .pattern-toolbar {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 36px 46px 36px minmax(0, 1fr) 36px 48px;
+  grid-template-columns: minmax(0, 1.05fr) 54px 42px minmax(0, 1fr) 42px 52px;
   gap: 5px;
 }
 
@@ -202,13 +202,13 @@ h2 {
   grid-template-columns: 1fr;
   max-height: 178px;
   overflow-y: auto;
-  padding: 6px;
+  padding: 6px 6px 6px 8px;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-color: rgba(71, 215, 198, 0.58) rgba(255, 255, 255, 0.06);
   scrollbar-width: thin;
   background:
-    linear-gradient(rgba(71, 215, 198, 0.58), rgba(71, 215, 198, 0.58)) 4px 50% / 4px 64px no-repeat,
+    linear-gradient(rgba(71, 215, 198, 0.58), rgba(71, 215, 198, 0.58)) 3px 50% / 4px 64px no-repeat,
     rgba(16, 19, 22, 0.65);
 }
 

@@ -10,8 +10,6 @@ const patternLabel = document.querySelector(".top-bar .eyebrow");
 const patternControls = document.querySelector("#patternControls");
 const patternToggleButton = document.querySelector("#patternToggleButton");
 const patternTitleToggle = document.querySelector("#patternTitleToggle");
-const patternPrev = document.querySelector("#patternPrev");
-const patternNext = document.querySelector("#patternNext");
 const patternAdd = document.querySelector("#patternAdd");
 const rowsDown = document.querySelector("#rowsDown");
 const rowsUp = document.querySelector("#rowsUp");
@@ -1059,8 +1057,6 @@ sampleDeck.addEventListener("click", (event) => {
   playCell(makeCell(sampleVoices[selectedSample].preview, selectedSample));
 });
 
-patternPrev.addEventListener("click", () => switchPattern(activePatternIndex - 1));
-patternNext.addEventListener("click", () => switchPattern(activePatternIndex + 1));
 patternAdd.addEventListener("click", addPattern);
 rowsDown.addEventListener("click", () => resizePattern(pattern.length - rowStep));
 rowsUp.addEventListener("click", () => resizePattern(pattern.length + rowStep));
