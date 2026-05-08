@@ -86,14 +86,14 @@ button {
 .top-bar {
   grid-area: top;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto 44px 58px;
+  grid-template-columns: 42px minmax(0, 1fr) auto 44px 48px;
   align-items: center;
   gap: 7px;
   padding: 7px;
 }
 
 .top-bar:has(.top-loop-button[hidden]) {
-  grid-template-columns: 42px minmax(0, 1fr) auto 58px;
+  grid-template-columns: 42px minmax(0, 1fr) auto 48px;
 }
 
 .title-toggle {
@@ -108,6 +108,25 @@ button {
   background: var(--panel-2);
   color: var(--cyan);
   font-size: 12px;
+}
+
+.record-toggle {
+  position: relative;
+  overflow: visible;
+  border: 0;
+  background:
+    url("./assets/record-button-off.png") center / contain no-repeat;
+  color: transparent;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.46));
+}
+
+.record-toggle.recording {
+  background-image: url("./assets/record-button-on.png");
+}
+
+.record-toggle:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 
 .eyebrow {
@@ -378,18 +397,20 @@ h2 {
 .loop-toggle.looping {
   border-color: var(--lime);
   color: var(--lime);
-  background: rgba(166, 233, 87, 0.09);
+  background-image: url("./assets/loop-pattern-icon.png");
 }
 
 .loop-toggle {
-  font-size: 30px;
-  line-height: 1;
+  border: 0;
+  overflow: visible;
+  background:
+    url("./assets/loop-song-icon.png") center / contain no-repeat;
+  color: transparent;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.46));
 }
 
 .top-loop-button {
-  color: var(--amber);
-  font-size: 31px;
-  padding-bottom: 4px;
+  color: transparent;
 }
 
 .sequencing-drag .sequence-slot,
@@ -888,6 +909,7 @@ h2 {
 .volume-control button:active,
 .copy-status button:active,
 .sample-pad:active,
+.record-toggle:active,
 .transport button:active {
   transform: translateY(1px);
 }

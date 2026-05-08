@@ -28,7 +28,7 @@ const copyStatusText = document.querySelector("#copyStatusText");
 const copyCancel = document.querySelector("#copyCancel");
 const octaveDown = document.querySelector("#octaveDown");
 const octaveUp = document.querySelector("#octaveUp");
-const demoButton = document.querySelector("#demoButton");
+const recordButton = document.querySelector("#recordButton");
 const clearCell = document.querySelector("#clearCell");
 const tempoPanel = document.querySelector("#tempoPanel");
 const bpmSlider = document.querySelector("#bpmSlider");
@@ -77,6 +77,7 @@ let bpm = 126;
 let selectedSample = "03";
 let isPlaying = false;
 let isDemoLoaded = false;
+let isRecording = false;
 let isPatternLooping = true;
 let timer;
 let patternTouchStartX = 0;
@@ -680,12 +681,11 @@ function renderSequencer() {
   patternBank.innerHTML = "";
   patternBank.classList.toggle("remove-target", Boolean(sequenceDrag?.removeTarget));
   patternLoopToggle.hidden = patterns.length <= 1;
-  patternLoopToggle.textContent = isPatternLooping ? "↻•" : "↻";
   patternLoopToggle.classList.toggle("looping", isPatternLooping);
   patternLoopToggle.setAttribute("aria-pressed", isPatternLooping.toString());
   patternLoopToggle.setAttribute("aria-label", isPatternLooping
     ? "Loop current pattern"
-    : "Loop full sequence");
+    : "Play full song sequence");
 
   patternSequence.forEach((patternIndex, step) => {
     const isFilled = Number.isInteger(patternIndex);
@@ -1431,6 +1431,13 @@ function syncReadouts() {
   document.querySelectorAll(".piano-keyboard button").forEach((item) => {
     item.classList.toggle("active", item.dataset.note === armedNote);
   });
+  syncRecordButton();
+}
+
+function syncRecordButton() {
+  recordButton.classList.toggle("recording", isRecording);
+  recordButton.setAttribute("aria-pressed", isRecording.toString());
+  recordButton.setAttribute("aria-label", isRecording ? "Recording on" : "Recording off");
 }
 
 function writeNoteToActiveCell(note) {
@@ -1439,11 +1446,19 @@ function writeNoteToActiveCell(note) {
   playCell(pattern[activeRow][activeChannel]);
 }
 
+function previewNote(note) {
+  playCell(makeCell(noteToTrackerNote(note)));
+}
+
 function setActiveCellNote(note) {
   armedNote = note;
-  writeNoteToActiveCell(note);
+  if (isRecording && isPlaying) {
+    writeNoteToActiveCell(note);
+    renderPattern();
+  } else {
+    previewNote(note);
+  }
   syncReadouts();
-  renderPattern();
 }
 
 function updateActiveCellSample(sample) {
@@ -1519,8 +1534,6 @@ function resetComposition() {
   activeRow = 0;
   activeChannel = 0;
   isDemoLoaded = false;
-  demoButton.textContent = "Demo";
-  demoButton.setAttribute("aria-label", "Load demo song");
   selectSample("03");
   syncReadouts();
   renderPattern();
@@ -1545,8 +1558,6 @@ function loadDemoPattern() {
   activeRow = 0;
   activeChannel = 3;
   isDemoLoaded = true;
-  demoButton.textContent = "Create";
-  demoButton.setAttribute("aria-label", "Start a blank song");
   selectSample("04");
   syncReadouts();
   renderPattern();
@@ -2022,12 +2033,9 @@ clearCell.addEventListener("click", () => {
   renderPattern();
 });
 
-demoButton.addEventListener("click", () => {
-  if (isDemoLoaded) {
-    resetComposition();
-  } else {
-    loadDemoPattern();
-  }
+recordButton.addEventListener("click", () => {
+  isRecording = !isRecording;
+  syncRecordButton();
 });
 
 bpmTile.addEventListener("click", showTempoPanel);
