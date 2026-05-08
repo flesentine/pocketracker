@@ -22,6 +22,9 @@ const editorNoteGrid = document.querySelector("#editorNoteGrid");
 const volumeSlider = document.querySelector("#volumeSlider");
 const volumeReadout = document.querySelector("#volumeReadout");
 const playButton = document.querySelector("#playButton");
+const copyStatus = document.querySelector("#copyStatus");
+const copyStatusText = document.querySelector("#copyStatusText");
+const copyCancel = document.querySelector("#copyCancel");
 const octaveDown = document.querySelector("#octaveDown");
 const octaveUp = document.querySelector("#octaveUp");
 const demoButton = document.querySelector("#demoButton");
@@ -54,6 +57,7 @@ const minVisiblePatternRows = 8;
 const minPatternRowHeight = 22;
 const defaultVolume = 48;
 const cellDragDelay = 420;
+const rangeSelectTapWindow = 560;
 const cellDragAutoScrollEdge = 26;
 const cellDragAutoScrollInterval = 360;
 const sequenceDragAutoScrollEdge = 28;
@@ -85,6 +89,14 @@ let lastCellDragScrollAt = 0;
 let cellDragFirstVisibleRow = null;
 let draggedCell = null;
 let isDraggingCell = false;
+let isSelectingRange = false;
+let selectionStartCell = null;
+let selectionEndCell = null;
+let pendingCopiedBlock = null;
+let pastePending = false;
+let lastGridTapAt = 0;
+let lastGridTapCell = null;
+let rangeStatusMessage = "";
 let sequenceDrag = null;
 let queuedPatternForSequence = null;
 let sequenceGhost = null;
@@ -511,11 +523,13 @@ function renderPattern() {
       const isSelected = row === activeRow && channel === activeChannel;
       const isDragSource = draggedCell?.fromRow === row && draggedCell?.fromChannel === channel;
       const isDragTarget = draggedCell?.targetRow === row && draggedCell?.targetChannel === channel;
+      const isInCopiedRange = isCellInSelectedRange(row, channel);
       span.className = [
         "pattern-cell",
         isSelected ? "selected" : "",
         isDragSource ? "drag-source" : "",
         isDragTarget ? "drag-target" : "",
+        isInCopiedRange ? "range-selected" : "",
         mutedChannels[channel] ? "muted" : "",
       ].filter(Boolean).join(" ");
       span.dataset.channel = channel;
@@ -524,14 +538,14 @@ function renderPattern() {
       span.addEventListener("click", (event) => {
         event.stopPropagation();
         if (patternDidSwipe || patternHandledTap) return;
-        selectPatternCell(row, channel);
+        handlePatternCellTap(row, channel);
       });
       rowEl.append(span);
     });
 
     rowEl.addEventListener("click", () => {
       if (patternDidSwipe || patternHandledTap) return;
-      selectPatternCell(row, activeChannel);
+      handlePatternCellTap(row, activeChannel);
     });
 
     patternGrid.append(rowEl);
@@ -611,6 +625,155 @@ function updateScrollRail(element, prefix) {
 function updateScrollRails() {
   updateScrollRail(sequenceLane, "sequence");
   updateScrollRail(patternBank, "bank");
+}
+
+function getRangeBounds(startCell = selectionStartCell, endCell = selectionEndCell) {
+  if (!startCell || !endCell) return null;
+
+  return {
+    channel: startCell.channel,
+    startRow: Math.min(startCell.row, endCell.row),
+    endRow: Math.max(startCell.row, endCell.row),
+  };
+}
+
+function isCellInSelectedRange(row, channel) {
+  const bounds = getRangeBounds();
+  if (!bounds || channel !== bounds.channel) return false;
+
+  return row >= bounds.startRow && row <= bounds.endRow;
+}
+
+function updateCopyStatus() {
+  copyStatus.hidden = !rangeStatusMessage && !pastePending;
+  copyStatusText.textContent = rangeStatusMessage;
+}
+
+function showCopyStatus(message) {
+  rangeStatusMessage = message;
+  updateCopyStatus();
+}
+
+function clearPendingCopy() {
+  isSelectingRange = false;
+  selectionStartCell = null;
+  selectionEndCell = null;
+  pendingCopiedBlock = null;
+  pastePending = false;
+  rangeStatusMessage = "";
+  updateCopyStatus();
+  renderPattern();
+}
+
+function isDoubleTapRangeGesture(row, channel) {
+  const now = Date.now();
+  const matchesLastCell = (
+    lastGridTapCell?.row === row &&
+    lastGridTapCell?.channel === channel
+  );
+
+  return matchesLastCell && now - lastGridTapAt <= rangeSelectTapWindow;
+}
+
+function beginRangeSelection(row, channel) {
+  window.clearTimeout(cellDragTimer);
+  isSelectingRange = true;
+  selectionStartCell = { row, channel };
+  selectionEndCell = { row, channel };
+  pendingCopiedBlock = null;
+  pastePending = false;
+  rangeStatusMessage = "";
+  patternDidSwipe = true;
+  patternHandledTap = true;
+  activeRow = row;
+  activeChannel = channel;
+  syncReadouts();
+  updateCopyStatus();
+  renderPattern();
+}
+
+function updateRangeSelection(clientY) {
+  if (!isSelectingRange || !selectionStartCell) return;
+
+  const target = getPatternCellFromPoint(patternTouchStartX, clientY);
+  if (!target) return;
+
+  selectionEndCell = {
+    row: target.row,
+    channel: selectionStartCell.channel,
+  };
+  activeRow = target.row;
+  activeChannel = selectionStartCell.channel;
+  syncReadouts();
+  renderPattern();
+}
+
+function finishRangeSelection() {
+  if (!isSelectingRange) return;
+
+  const bounds = getRangeBounds();
+  isSelectingRange = false;
+  if (!bounds) {
+    clearPendingCopy();
+    return;
+  }
+
+  const values = [];
+  for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+    values.push(pattern[row][bounds.channel]);
+  }
+
+  pendingCopiedBlock = {
+    sourceChannel: bounds.channel,
+    startRow: bounds.startRow,
+    endRow: bounds.endRow,
+    values,
+  };
+  pastePending = true;
+  showCopyStatus(
+    `Copied ${values.length} ${values.length === 1 ? "row" : "rows"} from CH ${bounds.channel + 1}. Tap destination to paste.`,
+  );
+  renderPattern();
+}
+
+function pasteCopiedBlock(row, channel) {
+  if (!pastePending || !pendingCopiedBlock) return false;
+
+  const pasteEndRow = row + pendingCopiedBlock.values.length - 1;
+  if (pasteEndRow >= pattern.length) {
+    showCopyStatus("Not enough rows to paste here.");
+    return true;
+  }
+
+  pendingCopiedBlock.values.forEach((value, index) => {
+    pattern[row + index][channel] = value;
+  });
+  activeRow = row;
+  activeChannel = channel;
+  selectionStartCell = null;
+  selectionEndCell = null;
+  pendingCopiedBlock = null;
+  pastePending = false;
+  rangeStatusMessage = "";
+  syncReadouts();
+  updateCopyStatus();
+  renderPattern();
+  return true;
+}
+
+function rememberGridTap(row, channel) {
+  lastGridTapAt = Date.now();
+  lastGridTapCell = { row, channel };
+}
+
+function handlePatternCellTap(row, channel) {
+  if (pasteCopiedBlock(row, channel)) {
+    patternHandledTap = true;
+    return;
+  }
+
+  selectPatternCell(row, channel);
+  rememberGridTap(row, channel);
 }
 
 function syncChannelMutes() {
@@ -694,7 +857,7 @@ function selectPatternCellFromPoint(clientX, clientY) {
   const cell = getPatternCellFromPoint(clientX, clientY);
   if (!cell) return false;
 
-  selectPatternCell(cell.row, cell.channel);
+  handlePatternCellTap(cell.row, cell.channel);
   return true;
 }
 
@@ -1129,6 +1292,10 @@ function selectSample(sample) {
 }
 
 function switchPattern(index) {
+  if (pastePending || isSelectingRange) {
+    clearPendingCopy();
+  }
+
   const nextIndex = Math.min(Math.max(index, 0), patterns.length - 1);
   setActivePattern(nextIndex, {
     resetRow: true,
@@ -1148,6 +1315,10 @@ function addPattern() {
 }
 
 function resizePattern(rowCount) {
+  if (pastePending || isSelectingRange) {
+    clearPendingCopy();
+  }
+
   const nextRows = Math.min(maxPatternRows, Math.max(minPatternRows, rowCount));
   nextPatternRows = nextRows;
   const activePattern = patterns[activePatternIndex];
@@ -1509,6 +1680,16 @@ phoneShell.addEventListener("touchend", (event) => {
 }, { passive: false });
 
 patternGrid.addEventListener("pointerdown", (event) => {
+  const touchedCell = event.target.closest(".pattern-cell");
+  const touchedPointCell = touchedCell
+    ? {
+      row: Number(touchedCell.dataset.row),
+      channel: Number(touchedCell.dataset.channel),
+    }
+    : getPatternCellFromPoint(event.clientX, event.clientY);
+  const touchedRow = touchedPointCell?.row;
+  const touchedChannel = touchedPointCell?.channel;
+
   patternTouchStartX = event.clientX;
   patternTouchStartY = event.clientY;
   patternTouchLastX = event.clientX;
@@ -1517,11 +1698,17 @@ patternGrid.addEventListener("pointerdown", (event) => {
   patternHandledTap = false;
   window.clearTimeout(cellDragTimer);
 
-  const touchedCell = event.target.closest(".pattern-cell");
-  const touchedRow = Number(touchedCell?.dataset.row);
-  const touchedChannel = Number(touchedCell?.dataset.channel);
+  if (touchedPointCell && isDoubleTapRangeGesture(touchedRow, touchedChannel)) {
+    event.preventDefault();
+    lastGridTapAt = 0;
+    lastGridTapCell = null;
+    beginRangeSelection(touchedRow, touchedChannel);
+    patternGrid.setPointerCapture(event.pointerId);
+    return;
+  }
+
   const touchedValue = pattern[touchedRow]?.[touchedChannel];
-  if (touchedCell && touchedValue && touchedValue !== emptyCell) {
+  if (touchedPointCell && touchedValue && touchedValue !== emptyCell) {
     cellDragTimer = window.setTimeout(() => {
       beginCellDrag(touchedRow, touchedChannel);
     }, cellDragDelay);
@@ -1532,6 +1719,14 @@ patternGrid.addEventListener("pointerdown", (event) => {
 
 patternGrid.addEventListener("pointermove", (event) => {
   if (!patternGrid.hasPointerCapture(event.pointerId)) return;
+
+  if (isSelectingRange) {
+    event.preventDefault();
+    updateRangeSelection(event.clientY);
+    patternTouchLastX = event.clientX;
+    patternTouchLastY = event.clientY;
+    return;
+  }
 
   const deltaX = event.clientX - patternTouchLastX;
   const deltaY = event.clientY - patternTouchLastY;
@@ -1572,6 +1767,17 @@ patternGrid.addEventListener("pointerup", (event) => {
   if (!patternGrid.hasPointerCapture(event.pointerId)) return;
 
   window.clearTimeout(cellDragTimer);
+  if (isSelectingRange) {
+    event.preventDefault();
+    updateRangeSelection(event.clientY);
+    finishRangeSelection();
+    patternGrid.releasePointerCapture(event.pointerId);
+    window.setTimeout(() => {
+      patternDidSwipe = false;
+    }, 0);
+    return;
+  }
+
   if (isDraggingCell) {
     updateCellDrag(event.clientX, event.clientY);
     finishCellDrag();
@@ -1596,9 +1802,15 @@ patternGrid.addEventListener("pointerup", (event) => {
     const tappedCell = event.target.closest(".pattern-cell");
     if (tappedCell) {
       patternHandledTap = true;
-      selectPatternCell(Number(tappedCell.dataset.row), Number(tappedCell.dataset.channel));
+      const tappedRow = Number(tappedCell.dataset.row);
+      const tappedChannel = Number(tappedCell.dataset.channel);
+      handlePatternCellTap(tappedRow, tappedChannel);
+      lastGridTapAt = Date.now();
+      lastGridTapCell = { row: tappedRow, channel: tappedChannel };
     } else if (selectPatternCellFromPoint(event.clientX, event.clientY)) {
       patternHandledTap = true;
+      lastGridTapAt = Date.now();
+      lastGridTapCell = { row: activeRow, channel: activeChannel };
     }
   }
 
@@ -1609,8 +1821,13 @@ patternGrid.addEventListener("pointerup", (event) => {
 });
 
 patternGrid.addEventListener("pointercancel", () => {
+  if (isSelectingRange) {
+    clearPendingCopy();
+  }
   cancelCellDrag();
 });
+
+copyCancel.addEventListener("click", clearPendingCopy);
 
 clearCell.addEventListener("click", () => {
   pattern[activeRow][activeChannel] = emptyCell;

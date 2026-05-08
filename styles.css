@@ -516,6 +516,32 @@ h2 {
   color: rgba(141, 154, 155, 0.45);
 }
 
+.pattern-cell.range-selected {
+  position: relative;
+  z-index: 1;
+  color: var(--text);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(244, 183, 74, 0.32) 0 4px,
+      rgba(71, 215, 198, 0.18) 4px 8px
+    );
+  box-shadow:
+    inset 0 0 0 1px var(--amber),
+    inset 0 0 0 3px rgba(16, 19, 22, 0.62);
+  animation: selection-march 0.8s linear infinite;
+}
+
+@keyframes selection-march {
+  from {
+    background-position: 0 0;
+  }
+
+  to {
+    background-position: 12px 0;
+  }
+}
+
 .pattern-grid {
   min-height: 0;
   height: 100%;
@@ -568,6 +594,21 @@ h2 {
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.5),
     0 0 18px rgba(71, 215, 198, 0.22);
+}
+
+.pattern-cell.range-selected.selected {
+  color: var(--text);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(244, 183, 74, 0.32) 0 4px,
+      rgba(71, 215, 198, 0.18) 4px 8px
+    );
+  box-shadow:
+    inset 0 0 0 1px var(--amber),
+    inset 0 0 0 3px rgba(16, 19, 22, 0.62),
+    0 0 18px rgba(244, 183, 74, 0.2);
+  animation: selection-march 0.8s linear infinite;
 }
 
 .cell-dragging .pattern-cell {
@@ -722,6 +763,34 @@ h2 {
   font-size: 11px;
 }
 
+.copy-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 5px 4px 9px;
+  border: 1px solid rgba(244, 183, 74, 0.5);
+  background: rgba(244, 183, 74, 0.11);
+  color: var(--amber);
+  font-size: 10px;
+}
+
+.copy-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-status button {
+  min-height: 22px;
+  border: 1px solid rgba(255, 107, 93, 0.46);
+  background: rgba(255, 107, 93, 0.1);
+  color: var(--red);
+  font-size: 10px;
+}
+
 .piano-keyboard {
   position: relative;
   display: grid;
@@ -802,6 +871,7 @@ h2 {
 .tempo-step:active,
 .tempo-done:active,
 .volume-control button:active,
+.copy-status button:active,
 .sample-pad:active,
 .transport button:active {
   transform: translateY(1px);

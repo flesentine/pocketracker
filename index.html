@@ -26,7 +26,7 @@
       content="A pocket-sized old-school tracker for making patterns with synth drums, bass, leads, and piano-style note entry."
     />
     <meta name="twitter:image" content="https://flesentine.github.io/pocketracker/og-image.png?v=20260506-11" />
-    <link rel="stylesheet" href="./styles.css?v=20260507-9" />
+    <link rel="stylesheet" href="./styles.css?v=20260507-10" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Pocket tracker prototype">
@@ -36,7 +36,7 @@
           <p class="eyebrow">Pattern 01</p>
           <h1>Pocket Tracker</h1>
         </div>
-        <span class="version-stamp" aria-label="Build version">v2026.05.07.9</span>
+        <span class="version-stamp" aria-label="Build version">v2026.05.07.10</span>
         <button id="patternLoopToggle" class="icon-button loop-toggle top-loop-button" aria-label="Toggle pattern loop" hidden>↻</button>
         <button class="icon-button" id="demoButton" aria-label="Load demo song">Demo</button>
       </header>
@@ -118,6 +118,10 @@
           <input id="volumeSlider" type="range" min="0" max="64" value="48" />
           <button id="clearCell">Clear</button>
         </div>
+        <div class="copy-status" id="copyStatus" hidden>
+          <span id="copyStatusText"></span>
+          <button id="copyCancel">Cancel</button>
+        </div>
         <div class="piano-keyboard" id="editorNoteGrid" aria-label="Notes">
           <button class="white-key" data-note="C">C</button>
           <button class="white-key" data-note="D">D</button>
@@ -140,6 +144,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260507-9"></script>
+    <script src="./app.js?v=20260507-10"></script>
   </body>
 </html>
