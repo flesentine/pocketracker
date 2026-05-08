@@ -13,6 +13,7 @@ const patternTitleToggle = document.querySelector("#patternTitleToggle");
 const patternAdd = document.querySelector("#patternAdd");
 const rowsSelect = document.querySelector("#rowsSelect");
 const rowsMenu = document.querySelector("#rowsMenu");
+const exportMp3 = document.querySelector("#exportMp3");
 const patternLoopToggle = document.querySelector("#patternLoopToggle");
 const sequenceLane = document.querySelector("#sequenceLane");
 const patternBank = document.querySelector("#patternBank");
@@ -113,7 +114,7 @@ let pendingPaneGesture = null;
 let suppressPaneClick = false;
 let mutedChannels = Array(4).fill(false);
 let audioContext;
-let noiseBuffer;
+const noiseBuffers = new Map();
 
 function createPattern(rows) {
   return {
@@ -161,14 +162,16 @@ function getAudioContext() {
 }
 
 function getNoiseBuffer(ctx) {
-  if (noiseBuffer) return noiseBuffer;
+  const key = ctx.sampleRate;
+  if (noiseBuffers.has(key)) return noiseBuffers.get(key);
 
-  noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.35, ctx.sampleRate);
+  const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.35, ctx.sampleRate);
   const channel = noiseBuffer.getChannelData(0);
   for (let index = 0; index < channel.length; index += 1) {
     channel[index] = Math.random() * 2 - 1;
   }
 
+  noiseBuffers.set(key, noiseBuffer);
   return noiseBuffer;
 }
 
@@ -367,11 +370,9 @@ function parseCell(cell) {
   return { note, sample, volume };
 }
 
-function playCell(cell, when = getAudioContext().currentTime) {
-  const parsed = parseCell(cell);
+function scheduleParsedCell(ctx, parsed, when) {
   if (!parsed) return;
 
-  const ctx = getAudioContext();
   if (parsed.sample === "01") {
     playKick(ctx, when, parsed.volume);
   } else if (parsed.sample === "02") {
@@ -385,6 +386,13 @@ function playCell(cell, when = getAudioContext().currentTime) {
   } else {
     playTone(ctx, parsed.note, parsed.sample, when, parsed.volume);
   }
+}
+
+function playCell(cell, when = getAudioContext().currentTime) {
+  const parsed = parseCell(cell);
+  if (!parsed) return;
+
+  scheduleParsedCell(getAudioContext(), parsed, when);
 }
 
 function playRow(rowIndex) {
@@ -404,6 +412,117 @@ function getPlayableSequence() {
   return patternSequence
     .map((patternIndex, step) => ({ patternIndex, step }))
     .filter((item) => Number.isInteger(item.patternIndex) && patterns[item.patternIndex]);
+}
+
+function getSongExportSequence() {
+  const playable = getPlayableSequence();
+  if (playable.length > 0) {
+    return playable.map((item) => patterns[item.patternIndex]);
+  }
+
+  return [patterns[activePatternIndex]];
+}
+
+function scheduleSongRender(ctx, sequence) {
+  const rowDuration = getRowDuration() / 1000;
+  let playhead = 0;
+
+  sequence.forEach((songPattern) => {
+    songPattern.cells.forEach((row) => {
+      row.forEach((cell, channelIndex) => {
+        if (mutedChannels[channelIndex]) return;
+
+        scheduleParsedCell(ctx, parseCell(cell), playhead + channelIndex * 0.006);
+      });
+      playhead += rowDuration;
+    });
+  });
+
+  return playhead;
+}
+
+function floatTo16BitPcm(input) {
+  const output = new Int16Array(input.length);
+  for (let index = 0; index < input.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, input[index]));
+    output[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+
+  return output;
+}
+
+function encodeMp3(audioBuffer) {
+  const left = floatTo16BitPcm(audioBuffer.getChannelData(0));
+  const right = audioBuffer.numberOfChannels > 1
+    ? floatTo16BitPcm(audioBuffer.getChannelData(1))
+    : left;
+  const encoder = new window.lamejs.Mp3Encoder(2, audioBuffer.sampleRate, 128);
+  const chunks = [];
+  const blockSize = 1152;
+
+  for (let index = 0; index < left.length; index += blockSize) {
+    const encoded = encoder.encodeBuffer(
+      left.subarray(index, index + blockSize),
+      right.subarray(index, index + blockSize),
+    );
+    if (encoded.length > 0) chunks.push(encoded);
+  }
+
+  const finalChunk = encoder.flush();
+  if (finalChunk.length > 0) chunks.push(finalChunk);
+
+  return new Blob(chunks, { type: "audio/mpeg" });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportSongToMp3() {
+  const OfflineEngine = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!OfflineEngine) {
+    showCopyStatus("MP3 export is not supported in this browser.");
+    return;
+  }
+
+  if (!window.lamejs?.Mp3Encoder) {
+    showCopyStatus("MP3 encoder did not load. Try again online.");
+    return;
+  }
+
+  const sequence = getSongExportSequence();
+  const sampleRate = 44100;
+  const rowCount = sequence.reduce((total, songPattern) => total + songPattern.cells.length, 0);
+  const tailSeconds = 1;
+  const durationSeconds = Math.max(1, (rowCount * getRowDuration()) / 1000 + tailSeconds);
+  const exportContext = new OfflineEngine(2, Math.ceil(durationSeconds * sampleRate), sampleRate);
+  const originalLabel = exportMp3.textContent;
+
+  exportMp3.disabled = true;
+  exportMp3.textContent = "Exporting...";
+  showCopyStatus("Rendering MP3...");
+
+  try {
+    scheduleSongRender(exportContext, sequence);
+    const renderedBuffer = await exportContext.startRendering();
+    const blob = encodeMp3(renderedBuffer);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadBlob(blob, `pocket-tracker-${timestamp}.mp3`);
+    showCopyStatus("MP3 downloaded.");
+  } catch (error) {
+    console.error(error);
+    showCopyStatus("Could not export MP3.");
+  } finally {
+    exportMp3.disabled = false;
+    exportMp3.textContent = originalLabel;
+  }
 }
 
 function normalizeSequence() {
@@ -1485,6 +1604,7 @@ sampleDeck.addEventListener("click", (event) => {
 });
 
 patternAdd.addEventListener("click", addPattern);
+exportMp3.addEventListener("click", exportSongToMp3);
 rowsSelect.addEventListener("click", () => {
   renderRowsMenu();
   rowsMenu.hidden = !rowsMenu.hidden;
