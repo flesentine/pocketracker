@@ -90,8 +90,11 @@ let cellDragFirstVisibleRow = null;
 let draggedCell = null;
 let isDraggingCell = false;
 let isSelectingRange = false;
+let isRangeSelectionArmed = false;
+let didMoveRangeSelection = false;
 let selectionStartCell = null;
 let selectionEndCell = null;
+let selectionAnchorX = 0;
 let pendingCopiedBlock = null;
 let pastePending = false;
 let lastGridTapAt = 0;
@@ -656,11 +659,16 @@ function showCopyStatus(message) {
 
 function clearPendingCopy() {
   isSelectingRange = false;
+  isRangeSelectionArmed = false;
+  didMoveRangeSelection = false;
   selectionStartCell = null;
   selectionEndCell = null;
+  selectionAnchorX = 0;
   pendingCopiedBlock = null;
   pastePending = false;
   rangeStatusMessage = "";
+  cellDragFirstVisibleRow = null;
+  lastCellDragScrollAt = 0;
   updateCopyStatus();
   renderPattern();
 }
@@ -675,16 +683,21 @@ function isDoubleTapRangeGesture(row, channel) {
   return matchesLastCell && now - lastGridTapAt <= rangeSelectTapWindow;
 }
 
-function beginRangeSelection(row, channel) {
+function beginRangeSelection(row, channel, anchorX = patternTouchStartX) {
   window.clearTimeout(cellDragTimer);
   isSelectingRange = true;
+  isRangeSelectionArmed = false;
+  didMoveRangeSelection = false;
   selectionStartCell = { row, channel };
   selectionEndCell = { row, channel };
+  selectionAnchorX = anchorX;
   pendingCopiedBlock = null;
   pastePending = false;
   rangeStatusMessage = "";
   patternDidSwipe = true;
   patternHandledTap = true;
+  lastCellDragScrollAt = 0;
+  cellDragFirstVisibleRow = getFirstVisibleRow();
   activeRow = row;
   activeChannel = channel;
   syncReadouts();
@@ -695,26 +708,58 @@ function beginRangeSelection(row, channel) {
 function updateRangeSelection(clientY) {
   if (!isSelectingRange || !selectionStartCell) return;
 
-  const target = getPatternCellFromPoint(patternTouchStartX, clientY);
+  const gridRect = patternGrid.getBoundingClientRect();
+  const now = window.performance.now();
+  const canAutoScroll = now - lastCellDragScrollAt >= cellDragAutoScrollInterval;
+  if (canAutoScroll && clientY < gridRect.top + cellDragAutoScrollEdge) {
+    cellDragFirstVisibleRow = Math.max(0, getFirstVisibleRow() - 1);
+    renderPattern();
+    lastCellDragScrollAt = now;
+  } else if (canAutoScroll && clientY > gridRect.bottom - cellDragAutoScrollEdge) {
+    const maxFirstRow = Math.max(0, pattern.length - getVisiblePatternRows());
+    cellDragFirstVisibleRow = Math.min(maxFirstRow, getFirstVisibleRow() + 1);
+    renderPattern();
+    lastCellDragScrollAt = now;
+  }
+
+  const target = getPatternCellFromPoint(selectionAnchorX, clientY);
   if (!target) return;
 
   selectionEndCell = {
     row: target.row,
     channel: selectionStartCell.channel,
   };
+  didMoveRangeSelection = didMoveRangeSelection || target.row !== selectionStartCell.row;
   activeRow = target.row;
   activeChannel = selectionStartCell.channel;
   syncReadouts();
   renderPattern();
 }
 
-function finishRangeSelection() {
+function armRangeSelection() {
+  if (!selectionStartCell || !selectionEndCell) return;
+
+  isSelectingRange = false;
+  isRangeSelectionArmed = true;
+  didMoveRangeSelection = false;
+  cellDragFirstVisibleRow = null;
+  lastCellDragScrollAt = 0;
+  showCopyStatus("Selection ready. Touch and drag to choose rows.");
+  renderPattern();
+}
+
+function finishRangeSelection({ armIfSingleCell = false } = {}) {
   if (!isSelectingRange) return;
 
   const bounds = getRangeBounds();
   isSelectingRange = false;
   if (!bounds) {
     clearPendingCopy();
+    return;
+  }
+
+  if (armIfSingleCell && !didMoveRangeSelection && bounds.startRow === bounds.endRow) {
+    armRangeSelection();
     return;
   }
 
@@ -730,6 +775,9 @@ function finishRangeSelection() {
     values,
   };
   pastePending = true;
+  isRangeSelectionArmed = false;
+  cellDragFirstVisibleRow = null;
+  lastCellDragScrollAt = 0;
   showCopyStatus(
     `Copied ${values.length} ${values.length === 1 ? "row" : "rows"} from CH ${bounds.channel + 1}. Tap destination to paste.`,
   );
@@ -752,8 +800,11 @@ function pasteCopiedBlock(row, channel) {
   activeChannel = channel;
   selectionStartCell = null;
   selectionEndCell = null;
+  selectionAnchorX = 0;
   pendingCopiedBlock = null;
   pastePending = false;
+  isRangeSelectionArmed = false;
+  didMoveRangeSelection = false;
   rangeStatusMessage = "";
   syncReadouts();
   updateCopyStatus();
@@ -839,7 +890,7 @@ function getVisiblePatternRows() {
 
 function getFirstVisibleRow() {
   const visibleRows = getVisiblePatternRows();
-  if (isDraggingCell && cellDragFirstVisibleRow !== null) {
+  if ((isDraggingCell || isSelectingRange) && cellDragFirstVisibleRow !== null) {
     return Math.min(
       Math.max(cellDragFirstVisibleRow, 0),
       Math.max(0, pattern.length - visibleRows),
@@ -1698,11 +1749,27 @@ patternGrid.addEventListener("pointerdown", (event) => {
   patternHandledTap = false;
   window.clearTimeout(cellDragTimer);
 
+  if (isRangeSelectionArmed && selectionStartCell) {
+    event.preventDefault();
+    isRangeSelectionArmed = false;
+    isSelectingRange = true;
+    didMoveRangeSelection = false;
+    patternDidSwipe = true;
+    patternHandledTap = true;
+    rangeStatusMessage = "";
+    cellDragFirstVisibleRow = getFirstVisibleRow();
+    lastCellDragScrollAt = 0;
+    updateCopyStatus();
+    updateRangeSelection(event.clientY);
+    patternGrid.setPointerCapture(event.pointerId);
+    return;
+  }
+
   if (touchedPointCell && isDoubleTapRangeGesture(touchedRow, touchedChannel)) {
     event.preventDefault();
     lastGridTapAt = 0;
     lastGridTapCell = null;
-    beginRangeSelection(touchedRow, touchedChannel);
+    beginRangeSelection(touchedRow, touchedChannel, event.clientX);
     patternGrid.setPointerCapture(event.pointerId);
     return;
   }
@@ -1770,7 +1837,7 @@ patternGrid.addEventListener("pointerup", (event) => {
   if (isSelectingRange) {
     event.preventDefault();
     updateRangeSelection(event.clientY);
-    finishRangeSelection();
+    finishRangeSelection({ armIfSingleCell: true });
     patternGrid.releasePointerCapture(event.pointerId);
     window.setTimeout(() => {
       patternDidSwipe = false;
