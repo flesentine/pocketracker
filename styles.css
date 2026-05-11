@@ -186,6 +186,20 @@ h2 {
   font-size: 11px;
 }
 
+.file-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.file-actions button {
+  min-height: 30px;
+  border-color: rgba(166, 233, 87, 0.36);
+  background: rgba(166, 233, 87, 0.08);
+  color: var(--lime);
+  text-transform: uppercase;
+}
+
 .pattern-controls .export-button {
   min-height: 26px;
   padding: 4px 8px;
@@ -683,6 +697,7 @@ h2 {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
+  touch-action: pan-x;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -704,6 +719,7 @@ h2 {
   line-height: 1.15;
   overflow: hidden;
   scroll-snap-align: start;
+  touch-action: pan-x;
 }
 
 .sample-pad.active {

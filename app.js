@@ -13,12 +13,16 @@ const patternTitleToggle = document.querySelector("#patternTitleToggle");
 const patternAdd = document.querySelector("#patternAdd");
 const rowsSelect = document.querySelector("#rowsSelect");
 const rowsMenu = document.querySelector("#rowsMenu");
+const saveProject = document.querySelector("#saveProject");
+const loadProject = document.querySelector("#loadProject");
+const projectFileInput = document.querySelector("#projectFileInput");
 const exportMp3 = document.querySelector("#exportMp3");
 const patternLoopToggle = document.querySelector("#patternLoopToggle");
 const sequenceLane = document.querySelector("#sequenceLane");
 const patternBank = document.querySelector("#patternBank");
 const channelHeaderButtons = document.querySelectorAll(".channel-head button[data-channel]");
 const sampleDeck = document.querySelector(".sample-deck");
+const sampleRack = document.querySelector("#sampleRack");
 const editorNoteGrid = document.querySelector("#editorNoteGrid");
 const volumeSlider = document.querySelector("#volumeSlider");
 const volumeReadout = document.querySelector("#volumeReadout");
@@ -48,6 +52,8 @@ const sampleVoices = {
   "08": { name: "Bell", preview: "C-5" },
 };
 
+const projectFileFormat = "pocket-tracker";
+const projectFileVersion = 1;
 const emptyCell = "--- .. ...";
 const defaultPatternRows = 64;
 const minPatternRows = 16;
@@ -113,6 +119,8 @@ let ignoreNextPlayClick = false;
 let paneScrollDrag = null;
 let pendingPaneGesture = null;
 let suppressPaneClick = false;
+let sampleRackDrag = null;
+let suppressSampleRackClickUntil = 0;
 let mutedChannels = Array(4).fill(false);
 let audioContext;
 const noiseBuffers = new Map();
@@ -484,6 +492,147 @@ function downloadBlob(blob, filename) {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function createPocketTrackerProject() {
+  normalizeSequence();
+
+  return {
+    format: projectFileFormat,
+    version: projectFileVersion,
+    savedAt: new Date().toISOString(),
+    transport: {
+      bpm,
+      isPatternLooping,
+      sequence: patternSequence.filter((item) => Number.isInteger(item)),
+    },
+    editor: {
+      activePatternIndex,
+      activeSequenceStep,
+      activeRow,
+      activeChannel,
+      octave,
+      selectedSample,
+      selectedVolume,
+      mutedChannels: [...mutedChannels],
+    },
+    patterns: patterns.map((item) => ({
+      rows: item.cells.length,
+      cells: item.cells.map((row) => row.map((cell) => cell)),
+    })),
+  };
+}
+
+function savePocketTrackerProject() {
+  const blob = new Blob([`${JSON.stringify(createPocketTrackerProject(), null, 2)}\n`], {
+    type: "application/json",
+  });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  downloadBlob(blob, `pocket-tracker-${timestamp}.pockettracker`);
+  showCopyStatus("Pocket Tracker file saved.");
+}
+
+function sanitizeProjectCell(cell) {
+  return typeof cell === "string" ? cell : emptyCell;
+}
+
+function sanitizeProjectPattern(item) {
+  if (!item || !Array.isArray(item.cells)) {
+    throw new Error("Missing pattern cells.");
+  }
+
+  const rowCount = Math.min(maxPatternRows, Math.max(minPatternRows, item.cells.length));
+  const cells = Array.from({ length: rowCount }, (_, rowIndex) => {
+    const sourceRow = Array.isArray(item.cells[rowIndex]) ? item.cells[rowIndex] : [];
+    return Array.from({ length: 4 }, (_, channel) => sanitizeProjectCell(sourceRow[channel]));
+  });
+
+  return { rows: rowCount, cells };
+}
+
+function sanitizeProjectData(data) {
+  if (!data || data.format !== projectFileFormat || data.version !== projectFileVersion) {
+    throw new Error("Unsupported Pocket Tracker file.");
+  }
+
+  if (!Array.isArray(data.patterns) || data.patterns.length === 0) {
+    throw new Error("Pocket Tracker file has no patterns.");
+  }
+
+  const loadedPatterns = data.patterns.map(sanitizeProjectPattern);
+  const transport = data.transport ?? {};
+  const editor = data.editor ?? {};
+  const sequence = Array.isArray(transport.sequence)
+    ? transport.sequence
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item) && loadedPatterns[item])
+    : [];
+
+  return {
+    patterns: loadedPatterns,
+    sequence: sequence.length > 0 ? sequence : [0],
+    bpm: Math.min(180, Math.max(80, Number(transport.bpm) || 126)),
+    isPatternLooping: transport.isPatternLooping !== false,
+    activePatternIndex: Math.min(
+      Math.max(Number(editor.activePatternIndex) || 0, 0),
+      loadedPatterns.length - 1,
+    ),
+    activeSequenceStep: Math.max(Number(editor.activeSequenceStep) || 0, 0),
+    activeRow: Math.max(Number(editor.activeRow) || 0, 0),
+    activeChannel: Math.min(Math.max(Number(editor.activeChannel) || 0, 0), 3),
+    octave: Math.min(Math.max(Number(editor.octave) || 3, 1), 6),
+    selectedSample: sampleVoices[editor.selectedSample] ? editor.selectedSample : "03",
+    selectedVolume: Math.min(Math.max(Number(editor.selectedVolume) || defaultVolume, 0), 64),
+    mutedChannels: Array.from({ length: 4 }, (_, index) => Boolean(editor.mutedChannels?.[index])),
+  };
+}
+
+function loadPocketTrackerProject(data) {
+  const loaded = sanitizeProjectData(data);
+
+  stopPlayback();
+  cancelCellDrag();
+  clearPendingCopy();
+
+  patterns.splice(0, patterns.length, ...loaded.patterns);
+  patternSequence.length = 0;
+  patternSequence.push(...loaded.sequence, null);
+  activePatternIndex = loaded.activePatternIndex;
+  activeSequenceStep = Math.min(loaded.activeSequenceStep, patternSequence.length - 2);
+  pattern = patterns[activePatternIndex].cells;
+  activeRow = Math.min(loaded.activeRow, pattern.length - 1);
+  activeChannel = loaded.activeChannel;
+  octave = loaded.octave;
+  bpm = loaded.bpm;
+  selectedSample = loaded.selectedSample;
+  selectedVolume = loaded.selectedVolume;
+  mutedChannels = loaded.mutedChannels;
+  isPatternLooping = loaded.isPatternLooping;
+  isDemoLoaded = false;
+  isRecording = false;
+  nextPatternRows = pattern.length;
+  queuedPatternForSequence = null;
+  sequenceGhost = null;
+  sequenceDrag = null;
+  normalizeSequence();
+  syncReadouts();
+  syncChannelMutes();
+  renderPattern();
+  renderSequencer();
+  showCopyStatus("Pocket Tracker file loaded.");
+}
+
+async function loadPocketTrackerFile(file) {
+  if (!file) return;
+
+  try {
+    loadPocketTrackerProject(JSON.parse(await file.text()));
+  } catch (error) {
+    console.error(error);
+    showCopyStatus("Could not load Pocket Tracker file.");
+  } finally {
+    projectFileInput.value = "";
+  }
 }
 
 async function exportSongToMp3() {
@@ -1452,7 +1601,7 @@ function previewNote(note) {
 
 function setActiveCellNote(note) {
   armedNote = note;
-  if (isRecording && isPlaying) {
+  if (isRecording) {
     writeNoteToActiveCell(note);
     renderPattern();
   } else {
@@ -1606,7 +1755,56 @@ function renderRowsMenu() {
   }
 }
 
+function beginSampleRackDrag(event) {
+  if (sampleRack.scrollWidth <= sampleRack.clientWidth) return;
+
+  sampleRackDrag = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startScrollLeft: sampleRack.scrollLeft,
+    didMove: false,
+    didCapture: false,
+  };
+}
+
+function updateSampleRackDrag(event) {
+  if (!sampleRackDrag || event.pointerId !== sampleRackDrag.pointerId) return;
+
+  const deltaX = event.clientX - sampleRackDrag.startX;
+  if (Math.abs(deltaX) > 5) {
+    if (!sampleRackDrag.didCapture) {
+      sampleRack.setPointerCapture(event.pointerId);
+      sampleRackDrag.didCapture = true;
+    }
+    sampleRackDrag.didMove = true;
+    event.preventDefault();
+    sampleRack.scrollLeft = sampleRackDrag.startScrollLeft - deltaX;
+  }
+}
+
+function finishSampleRackDrag(event) {
+  if (!sampleRackDrag || event.pointerId !== sampleRackDrag.pointerId) return;
+
+  if (sampleRackDrag.didCapture && sampleRack.hasPointerCapture(event.pointerId)) {
+    sampleRack.releasePointerCapture(event.pointerId);
+  }
+  if (sampleRackDrag.didMove) {
+    suppressSampleRackClickUntil = Date.now() + 180;
+  }
+  sampleRackDrag = null;
+}
+
+sampleRack.addEventListener("pointerdown", beginSampleRackDrag);
+sampleRack.addEventListener("pointermove", updateSampleRackDrag);
+sampleRack.addEventListener("pointerup", finishSampleRackDrag);
+sampleRack.addEventListener("pointercancel", finishSampleRackDrag);
+
 sampleDeck.addEventListener("click", (event) => {
+  if (Date.now() < suppressSampleRackClickUntil) {
+    event.preventDefault();
+    return;
+  }
+
   const pad = event.target.closest(".sample-pad");
   if (!pad) return;
 
@@ -1615,6 +1813,11 @@ sampleDeck.addEventListener("click", (event) => {
 });
 
 patternAdd.addEventListener("click", addPattern);
+saveProject.addEventListener("click", savePocketTrackerProject);
+loadProject.addEventListener("click", () => projectFileInput.click());
+projectFileInput.addEventListener("change", () => {
+  loadPocketTrackerFile(projectFileInput.files?.[0]);
+});
 exportMp3.addEventListener("click", exportSongToMp3);
 rowsSelect.addEventListener("click", () => {
   renderRowsMenu();
