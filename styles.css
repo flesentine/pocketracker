@@ -997,6 +997,10 @@ h2 {
 }
 
 .copy-status[hidden] {
+  display: none;
+}
+
+.copy-status.reserved[hidden] {
   display: grid !important;
   visibility: hidden;
   pointer-events: none;

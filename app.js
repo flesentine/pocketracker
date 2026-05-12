@@ -1041,7 +1041,9 @@ function isCellInSelectedRange(row, channel) {
 
 function updateCopyStatus() {
   const hasSelection = hasRangeSelection();
+  const shouldReserveSpace = pastePending || hasSelection || isSelectingRange || isRangeSelectionArmed;
   copyStatus.hidden = !rangeStatusMessage && !pastePending && !hasSelection;
+  copyStatus.classList.toggle("reserved", shouldReserveSpace);
   copyStatusText.textContent = rangeStatusMessage;
   copyCancel.textContent = pastePending || hasSelection ? "Deselect" : "Close";
 }
