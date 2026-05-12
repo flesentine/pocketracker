@@ -70,7 +70,7 @@ const cellDragAutoScrollEdge = 26;
 const cellDragAutoScrollInterval = 360;
 const sequenceDragAutoScrollEdge = 28;
 const sequenceDragAutoScrollAmount = 32;
-const patternCopyHoldDelay = 520;
+const patternCopyHoldDelay = 1020;
 const patternCopyMoveThreshold = 36;
 const patternDeleteMoveThreshold = 36;
 const patterns = [createPattern(defaultPatternRows)];
@@ -385,23 +385,45 @@ function playTone(ctx, note, sample, when, volume = defaultVolume) {
 }
 
 function playMetronomeClick(ctx, when, accent = false) {
-  const osc = ctx.createOscillator();
+  const tickBuffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.035), ctx.sampleRate);
+  const tickData = tickBuffer.getChannelData(0);
+  for (let index = 0; index < tickData.length; index += 1) {
+    const envelope = 1 - index / tickData.length;
+    tickData[index] = (Math.random() * 2 - 1) * envelope;
+  }
+
+  const tick = ctx.createBufferSource();
+  const woodTone = ctx.createOscillator();
+  const toneGain = ctx.createGain();
+  const tickGain = ctx.createGain();
   const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
 
-  osc.type = "square";
-  osc.frequency.setValueAtTime(accent ? 1760 : 1175, when);
-  filter.type = "highpass";
-  filter.frequency.setValueAtTime(900, when);
+  tick.buffer = tickBuffer;
+  woodTone.type = "triangle";
+  woodTone.frequency.setValueAtTime(accent ? 980 : 760, when);
+  toneGain.gain.setValueAtTime(0.001, when);
+  toneGain.gain.exponentialRampToValueAtTime(accent ? 0.168 : 0.117, when + 0.004);
+  toneGain.gain.exponentialRampToValueAtTime(0.001, when + 0.05);
+  tickGain.gain.setValueAtTime(accent ? 0.18 : 0.125, when);
+  tickGain.gain.exponentialRampToValueAtTime(0.001, when + 0.032);
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(accent ? 1250 : 1050, when);
+  filter.Q.setValueAtTime(1.4, when);
   gain.gain.setValueAtTime(0.001, when);
-  gain.gain.exponentialRampToValueAtTime(accent ? 0.28 : 0.18, when + 0.006);
-  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.055);
+  gain.gain.exponentialRampToValueAtTime(0.55, when + 0.003);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.07);
 
-  osc.connect(filter);
+  tick.connect(tickGain);
+  tickGain.connect(filter);
+  woodTone.connect(toneGain);
+  toneGain.connect(filter);
   filter.connect(gain);
   gain.connect(ctx.destination);
-  osc.start(when);
-  osc.stop(when + 0.065);
+  tick.start(when);
+  woodTone.start(when);
+  tick.stop(when + 0.04);
+  woodTone.stop(when + 0.07);
 }
 
 function parseCell(cell) {
@@ -441,8 +463,8 @@ function playCell(cell, when = getAudioContext().currentTime) {
 
 function playRow(rowIndex) {
   const ctx = getAudioContext();
-  if (isMetronomeEnabled) {
-    playMetronomeClick(ctx, ctx.currentTime, rowIndex % 40 === 0);
+  if (isMetronomeEnabled && rowIndex % 4 === 0) {
+    playMetronomeClick(ctx, ctx.currentTime, rowIndex % 32 === 0);
   }
 
   pattern[rowIndex].forEach((cell, channelIndex) => {
@@ -453,7 +475,7 @@ function playRow(rowIndex) {
 }
 
 function getRowDuration() {
-  return Math.round(60000 / (bpm * 2.5));
+  return Math.round(60000 / (bpm * 4));
 }
 
 function getPlayableSequence() {
@@ -940,6 +962,7 @@ function renderSequencer() {
       isCopySource && copyAction === "delete" ? "delete-ready" : "",
     ].filter(Boolean).join(" ");
     pad.type = "button";
+    pad.draggable = false;
     pad.dataset.pattern = index;
     pad.innerHTML = `<strong>PATTERN ${(index + 1).toString().padStart(2, "0")}</strong><span>${item.cells.length}</span>`;
     pad.setAttribute("aria-label", `Pattern ${index + 1}`);
@@ -1422,8 +1445,14 @@ function clearBankPatternGesture() {
 function movePatternCopyGhost(clientX, clientY) {
   if (!patternCopyGhost) return;
 
-  patternCopyGhost.style.left = `${clientX + 18}px`;
-  patternCopyGhost.style.top = `${clientY + 18}px`;
+  const ghostWidth = patternCopyGhost.offsetWidth || 178;
+  const ghostHeight = patternCopyGhost.offsetHeight || 56;
+  const preferredLeft = clientX - ghostWidth - 24;
+  const left = Math.max(8, Math.min(preferredLeft, window.innerWidth - ghostWidth - 8));
+  const top = Math.max(8, Math.min(clientY + 18, window.innerHeight - ghostHeight - 8));
+
+  patternCopyGhost.style.left = `${left}px`;
+  patternCopyGhost.style.top = `${top}px`;
 }
 
 function showPatternCopyGhost(patternIndex, clientX, clientY) {
@@ -1481,6 +1510,7 @@ function beginPatternCopyDrag() {
 }
 
 function beginBankPatternGesture(event, bankPad) {
+  event.preventDefault();
   clearBankPatternGesture();
   patternCopyDrag = null;
   hidePatternCopyGhost();
@@ -1491,6 +1521,11 @@ function beginBankPatternGesture(event, bankPad) {
     startY: event.clientY,
     timer: window.setTimeout(beginPatternCopyDrag, patternCopyHoldDelay),
   };
+  try {
+    patternControls.setPointerCapture(event.pointerId);
+  } catch (error) {
+    // Document-level pointer handlers can still manage this gesture.
+  }
 }
 
 function startBankSequenceDrag(event) {
@@ -1564,6 +1599,9 @@ function finishBankPatternGesture(event) {
     return true;
   }
 
+  if (patternControls.hasPointerCapture(event.pointerId)) {
+    patternControls.releasePointerCapture(event.pointerId);
+  }
   return false;
 }
 
@@ -2266,6 +2304,14 @@ patternControls.addEventListener("pointerdown", (event) => {
     beginSequenceDrag(patternSequence[sourceStep], sourceStep, event.clientX, event.clientY);
   }
   patternControls.setPointerCapture(event.pointerId);
+});
+
+patternControls.addEventListener("dragstart", (event) => {
+  event.preventDefault();
+});
+
+patternControls.addEventListener("selectstart", (event) => {
+  event.preventDefault();
 });
 
 patternControls.addEventListener("pointermove", (event) => {
