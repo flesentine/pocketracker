@@ -71,6 +71,7 @@ const cellDragAutoScrollInterval = 360;
 const sequenceDragAutoScrollEdge = 28;
 const sequenceDragAutoScrollAmount = 32;
 const patternCopyHoldDelay = 1020;
+const patternSequenceDragThreshold = 18;
 const patternCopyMoveThreshold = 36;
 const patternDeleteMoveThreshold = 36;
 const patterns = [createPattern(defaultPatternRows)];
@@ -403,9 +404,9 @@ function playMetronomeClick(ctx, when, accent = false) {
   woodTone.type = "triangle";
   woodTone.frequency.setValueAtTime(accent ? 980 : 760, when);
   toneGain.gain.setValueAtTime(0.001, when);
-  toneGain.gain.exponentialRampToValueAtTime(accent ? 0.168 : 0.117, when + 0.004);
+  toneGain.gain.exponentialRampToValueAtTime(accent ? 0.252 : 0.176, when + 0.004);
   toneGain.gain.exponentialRampToValueAtTime(0.001, when + 0.05);
-  tickGain.gain.setValueAtTime(accent ? 0.18 : 0.125, when);
+  tickGain.gain.setValueAtTime(accent ? 0.27 : 0.188, when);
   tickGain.gain.exponentialRampToValueAtTime(0.001, when + 0.032);
   filter.type = "bandpass";
   filter.frequency.setValueAtTime(accent ? 1250 : 1050, when);
@@ -914,6 +915,7 @@ function renderSequencer() {
   sequenceLane.innerHTML = "";
   patternBank.innerHTML = "";
   patternBank.classList.toggle("remove-target", Boolean(sequenceDrag?.removeTarget));
+  patternBank.classList.toggle("cancel-target", Boolean(sequenceDrag?.cancelTarget));
   patternLoopToggle.hidden = patterns.length <= 1;
   patternLoopToggle.classList.toggle("looping", isPatternLooping);
   patternLoopToggle.setAttribute("aria-pressed", isPatternLooping.toString());
@@ -948,6 +950,8 @@ function renderSequencer() {
     slot.setAttribute("aria-label", `Sequence step ${step + 1}, pattern ${patternIndex + 1}`);
     sequenceLane.append(slot);
   });
+
+  sequenceLane.classList.toggle("show-drop-hint", getFilledSequenceCount() <= 1);
 
   patterns.forEach((item, index) => {
     const isCopySource = patternCopyDrag?.patternIndex === index;
@@ -1552,7 +1556,11 @@ function updateBankPatternGesture(event) {
   const distance = Math.hypot(dx, dy);
 
   if (!patternCopyDrag) {
-    if (distance > 8) {
+    const isIntentionalSequenceDrag = (
+      Math.abs(dx) > patternSequenceDragThreshold &&
+      Math.abs(dx) > Math.abs(dy) * 1.15
+    );
+    if (isIntentionalSequenceDrag) {
       return startBankSequenceDrag(event);
     }
     return true;
@@ -1578,9 +1586,10 @@ function finishBankPatternGesture(event) {
 
   const action = patternCopyDrag?.action;
   const sourceIndex = bankPatternGesture.patternIndex;
+  const wasCopyGesture = Boolean(patternCopyDrag);
   clearBankPatternGesture();
 
-  if (patternCopyDrag) {
+  if (wasCopyGesture) {
     patternCopyDrag = null;
     hidePatternCopyGhost();
     if (patternControls.hasPointerCapture(event.pointerId)) {
@@ -1602,7 +1611,10 @@ function finishBankPatternGesture(event) {
   if (patternControls.hasPointerCapture(event.pointerId)) {
     patternControls.releasePointerCapture(event.pointerId);
   }
-  return false;
+  queuedPatternForSequence = sourceIndex;
+  switchPattern(sourceIndex);
+  renderSequencer();
+  return true;
 }
 
 function cancelBankPatternGesture() {
@@ -1696,6 +1708,7 @@ function beginSequenceDrag(patternIndex, sourceStep = null, clientX = 0, clientY
     sourceStep,
     targetStep: sourceStep,
     removeTarget: false,
+    cancelTarget: false,
   };
   document.body.classList.add("sequencing-drag");
   showSequenceGhost(patternIndex, clientX, clientY);
@@ -1715,13 +1728,20 @@ function updateSequenceDrag(clientX, clientY) {
     updateScrollRails();
   }
 
-  const removeTarget = sequenceDrag.sourceStep !== null && isPatternBankPoint(clientX, clientY);
+  const bankTarget = isPatternBankPoint(clientX, clientY);
+  const removeTarget = sequenceDrag.sourceStep !== null && bankTarget;
+  const cancelTarget = sequenceDrag.sourceStep === null && bankTarget;
   const targetStep = getSequenceDragTargetStep(clientX, clientY);
-  if (targetStep === null && !removeTarget && !sequenceDrag.removeTarget) return;
-  if (targetStep === sequenceDrag.targetStep && removeTarget === sequenceDrag.removeTarget) return;
+  if (targetStep === null && !removeTarget && !cancelTarget && !sequenceDrag.removeTarget && !sequenceDrag.cancelTarget) return;
+  if (
+    targetStep === sequenceDrag.targetStep &&
+    removeTarget === sequenceDrag.removeTarget &&
+    cancelTarget === sequenceDrag.cancelTarget
+  ) return;
 
   sequenceDrag.targetStep = targetStep;
   sequenceDrag.removeTarget = removeTarget;
+  sequenceDrag.cancelTarget = cancelTarget;
   renderSequencer();
 }
 
@@ -1729,7 +1749,9 @@ function finishSequenceDrag() {
   if (!sequenceDrag) return;
 
   const { patternIndex, sourceStep, targetStep } = sequenceDrag;
-  if (sequenceDrag.removeTarget && sourceStep !== null) {
+  if (sequenceDrag.cancelTarget && sourceStep === null) {
+    queuedPatternForSequence = null;
+  } else if (sequenceDrag.removeTarget && sourceStep !== null) {
     patternSequence.splice(sourceStep, 1);
     normalizeSequence();
     syncActiveSequenceAfterEdit();

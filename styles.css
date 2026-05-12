@@ -296,6 +296,7 @@ h2 {
 }
 
 .sequence-lane {
+  position: relative;
   grid-template-columns: 1fr;
   max-height: 178px;
   overflow-y: hidden;
@@ -306,6 +307,25 @@ h2 {
   background:
     linear-gradient(rgba(71, 215, 198, 0.58), rgba(71, 215, 198, 0.58)) 7px var(--sequence-scroll-top, 6px) / 4px var(--sequence-scroll-size, 64px) no-repeat,
     rgba(16, 19, 22, 0.65);
+}
+
+.sequence-lane::after {
+  content: "";
+}
+
+.sequence-lane.show-drop-hint::after {
+  content: "DRAG PATTERNS HERE";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-left: 22px;
+  color: rgba(141, 154, 155, 0.22);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: center;
+  pointer-events: none;
 }
 
 .sequence-lane::-webkit-scrollbar {
@@ -332,6 +352,11 @@ h2 {
 .pattern-bank.remove-target {
   border-color: rgba(255, 107, 93, 0.55);
   background: rgba(255, 107, 93, 0.08);
+}
+
+.pattern-bank.cancel-target {
+  border-color: rgba(141, 154, 155, 0.58);
+  background: rgba(141, 154, 155, 0.08);
 }
 
 .sequence-slot,
