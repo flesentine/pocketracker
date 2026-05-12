@@ -173,6 +173,14 @@ function noteToTrackerNote(note) {
   return note.length === 1 ? `${note}-${octave}` : `${note}${octave}`;
 }
 
+function transposeTrackerNoteOctave(note, delta) {
+  const match = note.match(/^([A-G][#-])(\d)$/);
+  if (!match) return note;
+
+  const nextOctave = Math.min(7, Math.max(1, Number(match[2]) + delta));
+  return `${match[1]}${nextOctave}`;
+}
+
 function getAudioContext() {
   if (!audioContext) {
     const AudioEngine = window.AudioContext || window.webkitAudioContext;
@@ -404,9 +412,9 @@ function playMetronomeClick(ctx, when, accent = false) {
   woodTone.type = "triangle";
   woodTone.frequency.setValueAtTime(accent ? 980 : 760, when);
   toneGain.gain.setValueAtTime(0.001, when);
-  toneGain.gain.exponentialRampToValueAtTime(accent ? 0.252 : 0.176, when + 0.004);
+  toneGain.gain.exponentialRampToValueAtTime(accent ? 0.504 : 0.352, when + 0.004);
   toneGain.gain.exponentialRampToValueAtTime(0.001, when + 0.05);
-  tickGain.gain.setValueAtTime(accent ? 0.27 : 0.188, when);
+  tickGain.gain.setValueAtTime(accent ? 0.54 : 0.376, when);
   tickGain.gain.exponentialRampToValueAtTime(0.001, when + 0.032);
   filter.type = "bandpass";
   filter.frequency.setValueAtTime(accent ? 1250 : 1050, when);
@@ -779,7 +787,10 @@ function setActivePattern(index, { resetRow = false, sequenceStep = activeSequen
   activePatternIndex = Math.min(Math.max(index, 0), patterns.length - 1);
   activeSequenceStep = sequenceStep;
   pattern = patterns[activePatternIndex].cells;
-  if (resetRow) activeRow = 0;
+  if (resetRow) {
+    activeRow = 0;
+    cellDragFirstVisibleRow = null;
+  }
   clampPatternPosition();
 }
 
@@ -818,6 +829,7 @@ function schedulePlaybackTick() {
     } else {
       activeRow += 1;
     }
+    cellDragFirstVisibleRow = null;
     syncReadouts();
     renderPattern();
     renderSequencer();
@@ -1004,6 +1016,17 @@ function getRangeBounds(startCell = selectionStartCell, endCell = selectionEndCe
   };
 }
 
+function hasRangeSelection() {
+  return Boolean(selectionStartCell && selectionEndCell);
+}
+
+function anchorPatternViewport() {
+  const renderedFirstRow = Number(patternGrid.querySelector(".pattern-row")?.dataset.row);
+  cellDragFirstVisibleRow = Number.isFinite(renderedFirstRow)
+    ? renderedFirstRow
+    : getFirstVisibleRow();
+}
+
 function isCellInSelectedRange(row, channel) {
   const bounds = getRangeBounds();
   if (!bounds) return false;
@@ -1017,8 +1040,10 @@ function isCellInSelectedRange(row, channel) {
 }
 
 function updateCopyStatus() {
-  copyStatus.hidden = !rangeStatusMessage && !pastePending;
+  const hasSelection = hasRangeSelection();
+  copyStatus.hidden = !rangeStatusMessage && !pastePending && !hasSelection;
   copyStatusText.textContent = rangeStatusMessage;
+  copyCancel.textContent = pastePending || hasSelection ? "Deselect" : "Close";
 }
 
 function showCopyStatus(message) {
@@ -1027,6 +1052,7 @@ function showCopyStatus(message) {
 }
 
 function clearPendingCopy() {
+  anchorPatternViewport();
   isSelectingRange = false;
   isRangeSelectionArmed = false;
   didMoveRangeSelection = false;
@@ -1037,6 +1063,22 @@ function clearPendingCopy() {
   pastePending = false;
   rangeStatusMessage = "";
   cellDragFirstVisibleRow = null;
+  lastCellDragScrollAt = 0;
+  updateCopyStatus();
+  renderPattern();
+}
+
+function clearSelectionOnly() {
+  anchorPatternViewport();
+  isSelectingRange = false;
+  isRangeSelectionArmed = false;
+  didMoveRangeSelection = false;
+  selectionStartCell = null;
+  selectionEndCell = null;
+  selectionAnchorX = 0;
+  pendingCopiedBlock = null;
+  pastePending = false;
+  rangeStatusMessage = "";
   lastCellDragScrollAt = 0;
   updateCopyStatus();
   renderPattern();
@@ -1066,7 +1108,7 @@ function beginRangeSelection(row, channel, anchorX = patternTouchStartX) {
   patternDidSwipe = true;
   patternHandledTap = true;
   lastCellDragScrollAt = 0;
-  cellDragFirstVisibleRow = getFirstVisibleRow();
+  anchorPatternViewport();
   activeRow = row;
   activeChannel = channel;
   syncReadouts();
@@ -1074,17 +1116,17 @@ function beginRangeSelection(row, channel, anchorX = patternTouchStartX) {
   renderPattern();
 }
 
-function updateRangeSelection(clientX, clientY) {
+function updateRangeSelection(clientX, clientY, { allowAutoScroll = true } = {}) {
   if (!isSelectingRange || !selectionStartCell) return;
 
   const gridRect = patternGrid.getBoundingClientRect();
   const now = window.performance.now();
   const canAutoScroll = now - lastCellDragScrollAt >= cellDragAutoScrollInterval;
-  if (canAutoScroll && clientY < gridRect.top + cellDragAutoScrollEdge) {
+  if (allowAutoScroll && canAutoScroll && clientY < gridRect.top + cellDragAutoScrollEdge) {
     cellDragFirstVisibleRow = Math.max(0, getFirstVisibleRow() - 1);
     renderPattern();
     lastCellDragScrollAt = now;
-  } else if (canAutoScroll && clientY > gridRect.bottom - cellDragAutoScrollEdge) {
+  } else if (allowAutoScroll && canAutoScroll && clientY > gridRect.bottom - cellDragAutoScrollEdge) {
     const maxFirstRow = Math.max(0, pattern.length - getVisiblePatternRows());
     cellDragFirstVisibleRow = Math.min(maxFirstRow, getFirstVisibleRow() + 1);
     renderPattern();
@@ -1111,10 +1153,10 @@ function updateRangeSelection(clientX, clientY) {
 function armRangeSelection() {
   if (!selectionStartCell || !selectionEndCell) return;
 
+  anchorPatternViewport();
   isSelectingRange = false;
   isRangeSelectionArmed = true;
   didMoveRangeSelection = false;
-  cellDragFirstVisibleRow = null;
   lastCellDragScrollAt = 0;
   showCopyStatus("Selection ready. Touch and drag to choose rows.");
   renderPattern();
@@ -1152,7 +1194,7 @@ function finishRangeSelection({ armIfSingleCell = false } = {}) {
   };
   pastePending = true;
   isRangeSelectionArmed = false;
-  cellDragFirstVisibleRow = null;
+  anchorPatternViewport();
   lastCellDragScrollAt = 0;
   showCopyStatus(
     `Copied ${rowCount} ${rowCount === 1 ? "row" : "rows"} x ${channelCount} ${channelCount === 1 ? "channel" : "channels"}. Tap destination to paste.`,
@@ -1162,6 +1204,7 @@ function finishRangeSelection({ armIfSingleCell = false } = {}) {
 
 function pasteCopiedBlock(row, channel) {
   if (!pastePending || !pendingCopiedBlock) return false;
+  anchorPatternViewport();
 
   const channelCount = pendingCopiedBlock.values[0]?.length ?? 0;
   const targetChannel = channelCount === 4 ? 0 : channel;
@@ -1193,6 +1236,48 @@ function pasteCopiedBlock(row, channel) {
   rangeStatusMessage = "";
   syncReadouts();
   updateCopyStatus();
+  renderPattern();
+  return true;
+}
+
+function refreshPendingCopiedBlockFromSelection(bounds) {
+  if (!pendingCopiedBlock || !bounds) return;
+
+  pendingCopiedBlock.values = [];
+  for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+    pendingCopiedBlock.values.push(pattern[row].slice(bounds.startChannel, bounds.endChannel + 1));
+  }
+}
+
+function transposeSelectedRangeOctave(delta) {
+  const bounds = getRangeBounds();
+  if (!bounds || isSelectingRange) return false;
+
+  let changedCount = 0;
+  for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+    for (let channel = bounds.startChannel; channel <= bounds.endChannel; channel += 1) {
+      const parsed = parseCell(pattern[row][channel]);
+      if (!parsed) continue;
+
+      const nextNote = transposeTrackerNoteOctave(parsed.note, delta);
+      if (nextNote === parsed.note) continue;
+
+      pattern[row][channel] = makeCell(nextNote, parsed.sample, parsed.volume);
+      changedCount += 1;
+    }
+  }
+
+  if (changedCount === 0) {
+    showCopyStatus("No notes in selection to transpose.");
+    return true;
+  }
+
+  refreshPendingCopiedBlockFromSelection(bounds);
+  anchorPatternViewport();
+  showCopyStatus(
+    `Transposed ${changedCount} ${changedCount === 1 ? "note" : "notes"} ${delta > 0 ? "up" : "down"} 1 octave. Deselect when done.`,
+  );
+  syncReadouts();
   renderPattern();
   return true;
 }
@@ -1275,7 +1360,7 @@ function getVisiblePatternRows() {
 
 function getFirstVisibleRow() {
   const visibleRows = getVisiblePatternRows();
-  if ((isDraggingCell || isSelectingRange) && cellDragFirstVisibleRow !== null) {
+  if (cellDragFirstVisibleRow !== null) {
     return Math.min(
       Math.max(cellDragFirstVisibleRow, 0),
       Math.max(0, pattern.length - visibleRows),
@@ -1879,6 +1964,7 @@ function cancelCellDrag() {
 }
 
 function selectPatternCell(row, channel) {
+  anchorPatternViewport();
   activeRow = row;
   activeChannel = channel;
   clampPatternPosition();
@@ -1887,6 +1973,7 @@ function selectPatternCell(row, channel) {
 }
 
 function moveRows(delta) {
+  cellDragFirstVisibleRow = null;
   activeRow = Math.min(Math.max(activeRow + delta, 0), pattern.length - 1);
   syncReadouts();
   renderPattern();
@@ -2468,11 +2555,15 @@ volumeSlider.addEventListener("input", (event) => {
 });
 
 octaveDown.addEventListener("click", () => {
+  if (transposeSelectedRangeOctave(-1)) return;
+
   octave = Math.max(1, octave - 1);
   syncReadouts();
 });
 
 octaveUp.addEventListener("click", () => {
+  if (transposeSelectedRangeOctave(1)) return;
+
   octave = Math.min(7, octave + 1);
   syncReadouts();
 });
@@ -2521,7 +2612,7 @@ patternGrid.addEventListener("pointerdown", (event) => {
     cellDragFirstVisibleRow = getFirstVisibleRow();
     lastCellDragScrollAt = 0;
     updateCopyStatus();
-    updateRangeSelection(event.clientX, event.clientY);
+    updateRangeSelection(event.clientX, event.clientY, { allowAutoScroll: false });
     patternGrid.setPointerCapture(event.pointerId);
     return;
   }
@@ -2655,7 +2746,7 @@ patternGrid.addEventListener("pointercancel", () => {
   cancelCellDrag();
 });
 
-copyCancel.addEventListener("click", clearPendingCopy);
+copyCancel.addEventListener("click", clearSelectionOnly);
 
 clearCell.addEventListener("click", () => {
   pattern[activeRow][activeChannel] = emptyCell;
