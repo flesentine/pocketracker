@@ -32,6 +32,7 @@ const copyStatusText = document.querySelector("#copyStatusText");
 const copyCancel = document.querySelector("#copyCancel");
 const octaveDown = document.querySelector("#octaveDown");
 const octaveUp = document.querySelector("#octaveUp");
+const metronomeButton = document.querySelector("#metronomeButton");
 const recordButton = document.querySelector("#recordButton");
 const clearCell = document.querySelector("#clearCell");
 const tempoPanel = document.querySelector("#tempoPanel");
@@ -69,6 +70,9 @@ const cellDragAutoScrollEdge = 26;
 const cellDragAutoScrollInterval = 360;
 const sequenceDragAutoScrollEdge = 28;
 const sequenceDragAutoScrollAmount = 32;
+const patternCopyHoldDelay = 520;
+const patternCopyMoveThreshold = 36;
+const patternDeleteMoveThreshold = 36;
 const patterns = [createPattern(defaultPatternRows)];
 const patternSequence = [0, null];
 let nextPatternRows = defaultPatternRows;
@@ -84,6 +88,7 @@ let selectedSample = "03";
 let isPlaying = false;
 let isDemoLoaded = false;
 let isRecording = false;
+let isMetronomeEnabled = false;
 let isPatternLooping = true;
 let timer;
 let patternTouchStartX = 0;
@@ -109,8 +114,11 @@ let lastGridTapAt = 0;
 let lastGridTapCell = null;
 let rangeStatusMessage = "";
 let sequenceDrag = null;
+let bankPatternGesture = null;
+let patternCopyDrag = null;
 let queuedPatternForSequence = null;
 let sequenceGhost = null;
+let patternCopyGhost = null;
 let selectedVolume = defaultVolume;
 let armedNote = null;
 let lastTouchEnd = 0;
@@ -129,6 +137,13 @@ function createPattern(rows) {
   return {
     rows,
     cells: Array.from({ length: rows }, () => Array(4).fill(emptyCell)),
+  };
+}
+
+function clonePattern(source) {
+  return {
+    rows: source.cells.length,
+    cells: source.cells.map((row) => row.map((cell) => cell)),
   };
 }
 
@@ -369,6 +384,26 @@ function playTone(ctx, note, sample, when, volume = defaultVolume) {
   osc.stop(when + (isLead ? 0.46 : isPluck ? 0.22 : 0.34));
 }
 
+function playMetronomeClick(ctx, when, accent = false) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  osc.type = "square";
+  osc.frequency.setValueAtTime(accent ? 1760 : 1175, when);
+  filter.type = "highpass";
+  filter.frequency.setValueAtTime(900, when);
+  gain.gain.setValueAtTime(0.001, when);
+  gain.gain.exponentialRampToValueAtTime(accent ? 0.28 : 0.18, when + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.055);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(when);
+  osc.stop(when + 0.065);
+}
+
 function parseCell(cell) {
   const [note, sample, volumeToken] = cell.split(/\s+/);
   if (!note || note === "---") return null;
@@ -406,6 +441,10 @@ function playCell(cell, when = getAudioContext().currentTime) {
 
 function playRow(rowIndex) {
   const ctx = getAudioContext();
+  if (isMetronomeEnabled) {
+    playMetronomeClick(ctx, ctx.currentTime, rowIndex % 40 === 0);
+  }
+
   pattern[rowIndex].forEach((cell, channelIndex) => {
     if (mutedChannels[channelIndex]) return;
 
@@ -504,6 +543,7 @@ function createPocketTrackerProject() {
     transport: {
       bpm,
       isPatternLooping,
+      isMetronomeEnabled,
       sequence: patternSequence.filter((item) => Number.isInteger(item)),
     },
     editor: {
@@ -523,12 +563,33 @@ function createPocketTrackerProject() {
   };
 }
 
+function sanitizeProjectFilename(name) {
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+
+  const withoutExtension = trimmed.replace(/\.(pt|pockettracker)$/i, "");
+  const safeName = withoutExtension
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return safeName ? `${safeName}.pt` : "";
+}
+
 function savePocketTrackerProject() {
+  const requestedName = window.prompt("Name this Pocket Tracker file:", "pocket-tracker");
+  if (requestedName === null) return;
+
+  const filename = sanitizeProjectFilename(requestedName);
+  if (!filename) {
+    showCopyStatus("Project was not saved.");
+    return;
+  }
+
   const blob = new Blob([`${JSON.stringify(createPocketTrackerProject(), null, 2)}\n`], {
     type: "application/json",
   });
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  downloadBlob(blob, `pocket-tracker-${timestamp}.pockettracker`);
+  downloadBlob(blob, filename);
   showCopyStatus("Pocket Tracker file saved.");
 }
 
@@ -573,6 +634,7 @@ function sanitizeProjectData(data) {
     sequence: sequence.length > 0 ? sequence : [0],
     bpm: Math.min(180, Math.max(80, Number(transport.bpm) || 126)),
     isPatternLooping: transport.isPatternLooping !== false,
+    isMetronomeEnabled: Boolean(transport.isMetronomeEnabled),
     activePatternIndex: Math.min(
       Math.max(Number(editor.activePatternIndex) || 0, 0),
       loadedPatterns.length - 1,
@@ -608,6 +670,7 @@ function loadPocketTrackerProject(data) {
   selectedVolume = loaded.selectedVolume;
   mutedChannels = loaded.mutedChannels;
   isPatternLooping = loaded.isPatternLooping;
+  isMetronomeEnabled = loaded.isMetronomeEnabled;
   isDemoLoaded = false;
   isRecording = false;
   nextPatternRows = pattern.length;
@@ -865,11 +928,16 @@ function renderSequencer() {
   });
 
   patterns.forEach((item, index) => {
+    const isCopySource = patternCopyDrag?.patternIndex === index;
+    const copyAction = patternCopyDrag?.action;
     const pad = document.createElement("button");
     pad.className = [
       "bank-pattern",
       index === activePatternIndex ? "active" : "",
       index === queuedPatternForSequence ? "queued" : "",
+      isCopySource ? "copy-source" : "",
+      isCopySource && copyAction === "copy" ? "copy-ready" : "",
+      isCopySource && copyAction === "delete" ? "delete-ready" : "",
     ].filter(Boolean).join(" ");
     pad.type = "button";
     pad.dataset.pattern = index;
@@ -902,17 +970,23 @@ function getRangeBounds(startCell = selectionStartCell, endCell = selectionEndCe
   if (!startCell || !endCell) return null;
 
   return {
-    channel: startCell.channel,
     startRow: Math.min(startCell.row, endCell.row),
     endRow: Math.max(startCell.row, endCell.row),
+    startChannel: Math.min(startCell.channel, endCell.channel),
+    endChannel: Math.max(startCell.channel, endCell.channel),
   };
 }
 
 function isCellInSelectedRange(row, channel) {
   const bounds = getRangeBounds();
-  if (!bounds || channel !== bounds.channel) return false;
+  if (!bounds) return false;
 
-  return row >= bounds.startRow && row <= bounds.endRow;
+  return (
+    row >= bounds.startRow &&
+    row <= bounds.endRow &&
+    channel >= bounds.startChannel &&
+    channel <= bounds.endChannel
+  );
 }
 
 function updateCopyStatus() {
@@ -973,7 +1047,7 @@ function beginRangeSelection(row, channel, anchorX = patternTouchStartX) {
   renderPattern();
 }
 
-function updateRangeSelection(clientY) {
+function updateRangeSelection(clientX, clientY) {
   if (!isSelectingRange || !selectionStartCell) return;
 
   const gridRect = patternGrid.getBoundingClientRect();
@@ -990,16 +1064,19 @@ function updateRangeSelection(clientY) {
     lastCellDragScrollAt = now;
   }
 
-  const target = getPatternCellFromPoint(selectionAnchorX, clientY);
+  const target = getPatternCellFromPoint(clientX, clientY);
   if (!target) return;
 
   selectionEndCell = {
     row: target.row,
-    channel: selectionStartCell.channel,
+    channel: target.channel,
   };
-  didMoveRangeSelection = didMoveRangeSelection || target.row !== selectionStartCell.row;
+  didMoveRangeSelection = didMoveRangeSelection || (
+    target.row !== selectionStartCell.row ||
+    target.channel !== selectionStartCell.channel
+  );
   activeRow = target.row;
-  activeChannel = selectionStartCell.channel;
+  activeChannel = target.channel;
   syncReadouts();
   renderPattern();
 }
@@ -1033,13 +1110,17 @@ function finishRangeSelection({ armIfSingleCell = false } = {}) {
 
   const values = [];
   for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
-    values.push(pattern[row][bounds.channel]);
+    values.push(pattern[row].slice(bounds.startChannel, bounds.endChannel + 1));
   }
+  const rowCount = bounds.endRow - bounds.startRow + 1;
+  const channelCount = bounds.endChannel - bounds.startChannel + 1;
 
   pendingCopiedBlock = {
-    sourceChannel: bounds.channel,
+    sourceChannel: bounds.startChannel,
     startRow: bounds.startRow,
     endRow: bounds.endRow,
+    startChannel: bounds.startChannel,
+    endChannel: bounds.endChannel,
     values,
   };
   pastePending = true;
@@ -1047,7 +1128,7 @@ function finishRangeSelection({ armIfSingleCell = false } = {}) {
   cellDragFirstVisibleRow = null;
   lastCellDragScrollAt = 0;
   showCopyStatus(
-    `Copied ${values.length} ${values.length === 1 ? "row" : "rows"} from CH ${bounds.channel + 1}. Tap destination to paste.`,
+    `Copied ${rowCount} ${rowCount === 1 ? "row" : "rows"} x ${channelCount} ${channelCount === 1 ? "channel" : "channels"}. Tap destination to paste.`,
   );
   renderPattern();
 }
@@ -1055,17 +1136,26 @@ function finishRangeSelection({ armIfSingleCell = false } = {}) {
 function pasteCopiedBlock(row, channel) {
   if (!pastePending || !pendingCopiedBlock) return false;
 
+  const channelCount = pendingCopiedBlock.values[0]?.length ?? 0;
+  const targetChannel = channelCount === 4 ? 0 : channel;
   const pasteEndRow = row + pendingCopiedBlock.values.length - 1;
   if (pasteEndRow >= pattern.length) {
     showCopyStatus("Not enough rows to paste here.");
     return true;
   }
 
-  pendingCopiedBlock.values.forEach((value, index) => {
-    pattern[row + index][channel] = value;
+  if (targetChannel + channelCount > 4) {
+    showCopyStatus("Not enough channels to paste here.");
+    return true;
+  }
+
+  pendingCopiedBlock.values.forEach((rowValues, rowOffset) => {
+    rowValues.forEach((value, channelOffset) => {
+      pattern[row + rowOffset][targetChannel + channelOffset] = value;
+    });
   });
   activeRow = row;
-  activeChannel = channel;
+  activeChannel = targetChannel;
   selectionStartCell = null;
   selectionEndCell = null;
   selectionAnchorX = 0;
@@ -1187,6 +1277,35 @@ function getSequenceStepFromPoint(clientX, clientY) {
   return Number(target.dataset.step);
 }
 
+function isSequenceLanePoint(clientX, clientY) {
+  const rect = sequenceLane.getBoundingClientRect();
+  return (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
+}
+
+function getFilledSequenceCount() {
+  return patternSequence.filter((item) => Number.isInteger(item)).length;
+}
+
+function getSequenceDragTargetStep(clientX, clientY) {
+  const targetStep = getSequenceStepFromPoint(clientX, clientY);
+  if (targetStep !== null) return targetStep;
+
+  if (
+    sequenceDrag?.sourceStep === null &&
+    getFilledSequenceCount() <= 1 &&
+    isSequenceLanePoint(clientX, clientY)
+  ) {
+    return Math.max(0, patternSequence.length - 1);
+  }
+
+  return null;
+}
+
 function isPatternBankPoint(clientX, clientY) {
   const rect = patternBank.getBoundingClientRect();
   return (
@@ -1293,6 +1412,171 @@ function startPendingSequenceDrag(clientX, clientY) {
   return true;
 }
 
+function clearBankPatternGesture() {
+  if (!bankPatternGesture) return;
+
+  window.clearTimeout(bankPatternGesture.timer);
+  bankPatternGesture = null;
+}
+
+function movePatternCopyGhost(clientX, clientY) {
+  if (!patternCopyGhost) return;
+
+  patternCopyGhost.style.left = `${clientX + 18}px`;
+  patternCopyGhost.style.top = `${clientY + 18}px`;
+}
+
+function showPatternCopyGhost(patternIndex, clientX, clientY) {
+  patternCopyGhost?.remove();
+  patternCopyGhost = document.createElement("div");
+  patternCopyGhost.className = "pattern-copy-ghost";
+  patternCopyGhost.innerHTML = `<span>DOWN COPY / UP DELETE</span><strong>PATTERN ${(patternIndex + 1).toString().padStart(2, "0")}</strong>`;
+  document.body.append(patternCopyGhost);
+  movePatternCopyGhost(clientX, clientY);
+}
+
+function hidePatternCopyGhost() {
+  patternCopyGhost?.remove();
+  patternCopyGhost = null;
+}
+
+function syncPatternCopyGhost() {
+  if (!patternCopyGhost || !patternCopyDrag) return;
+
+  const action = patternCopyDrag.action;
+  patternCopyGhost.classList.toggle("copy-ready", action === "copy");
+  patternCopyGhost.classList.toggle("delete-ready", action === "delete");
+  const label = action === "copy"
+    ? "COPY"
+    : action === "delete"
+      ? "DELETE"
+      : "DOWN COPY / UP DELETE";
+  patternCopyGhost.querySelector("span").textContent = label;
+}
+
+function beginPatternCopyDrag() {
+  if (!bankPatternGesture || sequenceDrag) return;
+
+  const { patternIndex, pointerId } = bankPatternGesture;
+  patternCopyDrag = {
+    patternIndex,
+    pointerId,
+    startX: bankPatternGesture.startX,
+    startY: bankPatternGesture.startY,
+    action: null,
+  };
+  suppressPaneClick = true;
+  showPatternCopyGhost(patternIndex, bankPatternGesture.startX, bankPatternGesture.startY);
+  syncPatternCopyGhost();
+  try {
+    patternControls.setPointerCapture(pointerId);
+  } catch (error) {
+    clearBankPatternGesture();
+    patternCopyDrag = null;
+    hidePatternCopyGhost();
+    suppressPaneClick = false;
+    return;
+  }
+  renderSequencer();
+}
+
+function beginBankPatternGesture(event, bankPad) {
+  clearBankPatternGesture();
+  patternCopyDrag = null;
+  hidePatternCopyGhost();
+  bankPatternGesture = {
+    patternIndex: Number(bankPad.dataset.pattern),
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    timer: window.setTimeout(beginPatternCopyDrag, patternCopyHoldDelay),
+  };
+}
+
+function startBankSequenceDrag(event) {
+  if (!bankPatternGesture) return false;
+
+  const { patternIndex } = bankPatternGesture;
+  clearBankPatternGesture();
+  beginSequenceDrag(patternIndex, null, event.clientX, event.clientY);
+  suppressPaneClick = false;
+  try {
+    patternControls.setPointerCapture(event.pointerId);
+  } catch (error) {
+    // Document-level pointer handlers can still finish the sequence drag.
+  }
+  updateSequenceDrag(event.clientX, event.clientY);
+  return true;
+}
+
+function updateBankPatternGesture(event) {
+  if (!bankPatternGesture || event.pointerId !== bankPatternGesture.pointerId) return false;
+
+  const dx = event.clientX - bankPatternGesture.startX;
+  const dy = event.clientY - bankPatternGesture.startY;
+  const distance = Math.hypot(dx, dy);
+
+  if (!patternCopyDrag) {
+    if (distance > 8) {
+      return startBankSequenceDrag(event);
+    }
+    return true;
+  }
+
+  event.preventDefault();
+  movePatternCopyGhost(event.clientX, event.clientY);
+  const nextAction = dy > patternCopyMoveThreshold
+    ? "copy"
+    : dy < -patternDeleteMoveThreshold
+      ? "delete"
+      : null;
+  if (nextAction !== patternCopyDrag.action) {
+    patternCopyDrag.action = nextAction;
+    syncPatternCopyGhost();
+    renderSequencer();
+  }
+  return true;
+}
+
+function finishBankPatternGesture(event) {
+  if (!bankPatternGesture || event.pointerId !== bankPatternGesture.pointerId) return false;
+
+  const action = patternCopyDrag?.action;
+  const sourceIndex = bankPatternGesture.patternIndex;
+  clearBankPatternGesture();
+
+  if (patternCopyDrag) {
+    patternCopyDrag = null;
+    hidePatternCopyGhost();
+    if (patternControls.hasPointerCapture(event.pointerId)) {
+      patternControls.releasePointerCapture(event.pointerId);
+    }
+    window.setTimeout(() => {
+      suppressPaneClick = false;
+    }, 0);
+    if (action === "copy") {
+      copyPattern(sourceIndex);
+    } else if (action === "delete") {
+      deletePattern(sourceIndex);
+    } else {
+      renderSequencer();
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function cancelBankPatternGesture() {
+  clearBankPatternGesture();
+  patternCopyDrag = null;
+  hidePatternCopyGhost();
+  window.setTimeout(() => {
+    suppressPaneClick = false;
+  }, 0);
+  renderSequencer();
+}
+
 function updatePendingPaneGesture(event) {
   if (!pendingPaneGesture) return false;
 
@@ -1394,7 +1678,7 @@ function updateSequenceDrag(clientX, clientY) {
   }
 
   const removeTarget = sequenceDrag.sourceStep !== null && isPatternBankPoint(clientX, clientY);
-  const targetStep = getSequenceStepFromPoint(clientX, clientY);
+  const targetStep = getSequenceDragTargetStep(clientX, clientY);
   if (targetStep === null && !removeTarget && !sequenceDrag.removeTarget) return;
   if (targetStep === sequenceDrag.targetStep && removeTarget === sequenceDrag.removeTarget) return;
 
@@ -1581,12 +1865,19 @@ function syncReadouts() {
     item.classList.toggle("active", item.dataset.note === armedNote);
   });
   syncRecordButton();
+  syncMetronomeButton();
 }
 
 function syncRecordButton() {
   recordButton.classList.toggle("recording", isRecording);
   recordButton.setAttribute("aria-pressed", isRecording.toString());
   recordButton.setAttribute("aria-label", isRecording ? "Recording on" : "Recording off");
+}
+
+function syncMetronomeButton() {
+  metronomeButton.classList.toggle("enabled", isMetronomeEnabled);
+  metronomeButton.setAttribute("aria-pressed", isMetronomeEnabled.toString());
+  metronomeButton.setAttribute("aria-label", isMetronomeEnabled ? "Metronome on" : "Metronome off");
 }
 
 function writeNoteToActiveCell(note) {
@@ -1646,6 +1937,54 @@ function addPattern() {
   patterns.push(createPattern(nextPatternRows));
   normalizeSequence();
   switchPattern(patterns.length - 1);
+}
+
+function copyPattern(index) {
+  if (!Number.isInteger(index) || !patterns[index]) return;
+
+  patterns.push(clonePattern(patterns[index]));
+  nextPatternRows = patterns[patterns.length - 1].cells.length;
+  normalizeSequence();
+  switchPattern(patterns.length - 1);
+  showCopyStatus(`Pattern ${(index + 1).toString().padStart(2, "0")} copied.`);
+}
+
+function deletePattern(index) {
+  if (!Number.isInteger(index) || !patterns[index]) return;
+
+  if (patterns.length <= 1) {
+    showCopyStatus("Keep at least one pattern.");
+    renderSequencer();
+    return;
+  }
+
+  const deletedLabel = (index + 1).toString().padStart(2, "0");
+  patterns.splice(index, 1);
+  patternSequence.splice(
+    0,
+    patternSequence.length,
+    ...patternSequence
+      .filter((patternIndex) => patternIndex !== index)
+      .map((patternIndex) => (
+        Number.isInteger(patternIndex) && patternIndex > index
+          ? patternIndex - 1
+          : patternIndex
+      )),
+  );
+  if (queuedPatternForSequence === index) {
+    queuedPatternForSequence = null;
+  } else if (queuedPatternForSequence > index) {
+    queuedPatternForSequence -= 1;
+  }
+
+  normalizeSequence();
+  const nextIndex = activePatternIndex === index
+    ? Math.min(index, patterns.length - 1)
+    : activePatternIndex > index
+      ? activePatternIndex - 1
+      : activePatternIndex;
+  switchPattern(nextIndex);
+  showCopyStatus(`Pattern ${deletedLabel} deleted.`);
 }
 
 function resizePattern(rowCount) {
@@ -1919,7 +2258,8 @@ patternControls.addEventListener("pointerdown", (event) => {
   if (isSequenceScrollGutter || isBankScrollGutter) return;
 
   if (bankPad) {
-    beginSequenceDrag(Number(bankPad.dataset.pattern), null, event.clientX, event.clientY);
+    beginBankPatternGesture(event, bankPad);
+    return;
   } else {
     event.preventDefault();
     const sourceStep = Number(sequenceSlot.dataset.step);
@@ -1929,6 +2269,11 @@ patternControls.addEventListener("pointerdown", (event) => {
 });
 
 patternControls.addEventListener("pointermove", (event) => {
+  if (bankPatternGesture) {
+    updateBankPatternGesture(event);
+    return;
+  }
+
   if (pendingPaneGesture && patternControls.hasPointerCapture(event.pointerId)) {
     updatePendingPaneGesture(event);
     return;
@@ -1945,6 +2290,10 @@ patternControls.addEventListener("pointermove", (event) => {
 });
 
 patternControls.addEventListener("pointerup", (event) => {
+  if (bankPatternGesture && finishBankPatternGesture(event)) {
+    return;
+  }
+
   if (pendingPaneGesture && patternControls.hasPointerCapture(event.pointerId)) {
     finishPaneScroll();
     patternControls.releasePointerCapture(event.pointerId);
@@ -1966,11 +2315,17 @@ patternControls.addEventListener("pointerup", (event) => {
 });
 
 patternControls.addEventListener("pointercancel", () => {
+  cancelBankPatternGesture();
   finishPaneScroll();
   cancelSequenceDrag();
 });
 
 document.addEventListener("pointermove", (event) => {
+  if (bankPatternGesture) {
+    updateBankPatternGesture(event);
+    return;
+  }
+
   if (pendingPaneGesture) {
     updatePendingPaneGesture(event);
     return;
@@ -1987,6 +2342,10 @@ document.addEventListener("pointermove", (event) => {
 });
 
 document.addEventListener("pointerup", (event) => {
+  if (bankPatternGesture && finishBankPatternGesture(event)) {
+    return;
+  }
+
   if (pendingPaneGesture) {
     finishPaneScroll();
     return;
@@ -2094,7 +2453,7 @@ patternGrid.addEventListener("pointerdown", (event) => {
     cellDragFirstVisibleRow = getFirstVisibleRow();
     lastCellDragScrollAt = 0;
     updateCopyStatus();
-    updateRangeSelection(event.clientY);
+    updateRangeSelection(event.clientX, event.clientY);
     patternGrid.setPointerCapture(event.pointerId);
     return;
   }
@@ -2123,7 +2482,7 @@ patternGrid.addEventListener("pointermove", (event) => {
 
   if (isSelectingRange) {
     event.preventDefault();
-    updateRangeSelection(event.clientY);
+    updateRangeSelection(event.clientX, event.clientY);
     patternTouchLastX = event.clientX;
     patternTouchLastY = event.clientY;
     return;
@@ -2170,7 +2529,7 @@ patternGrid.addEventListener("pointerup", (event) => {
   window.clearTimeout(cellDragTimer);
   if (isSelectingRange) {
     event.preventDefault();
-    updateRangeSelection(event.clientY);
+    updateRangeSelection(event.clientX, event.clientY);
     finishRangeSelection({ armIfSingleCell: true });
     patternGrid.releasePointerCapture(event.pointerId);
     window.setTimeout(() => {
@@ -2239,6 +2598,11 @@ clearCell.addEventListener("click", () => {
 recordButton.addEventListener("click", () => {
   isRecording = !isRecording;
   syncRecordButton();
+});
+
+metronomeButton.addEventListener("click", () => {
+  isMetronomeEnabled = !isMetronomeEnabled;
+  syncMetronomeButton();
 });
 
 bpmTile.addEventListener("click", showTempoPanel);

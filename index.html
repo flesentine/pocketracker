@@ -26,7 +26,7 @@
       content="A pocket-sized old-school tracker for making patterns with synth drums, bass, leads, and piano-style note entry."
     />
     <meta name="twitter:image" content="https://flesentine.github.io/pocketracker/og-image.png?v=20260506-11" />
-    <link rel="stylesheet" href="./styles.css?v=20260510-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260512-1" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Pocket tracker prototype">
@@ -36,8 +36,9 @@
           <p class="eyebrow">Pattern 01</p>
           <h1>Pocket Tracker</h1>
         </div>
-        <span class="version-stamp" aria-label="Build version">v2026.05.10.1</span>
+        <span class="version-stamp" aria-label="Build version">v2026.05.12.1</span>
         <button id="patternLoopToggle" class="icon-button loop-toggle top-loop-button" aria-label="Toggle pattern loop" hidden></button>
+        <button class="icon-button metronome-toggle" id="metronomeButton" type="button" aria-label="Metronome off" aria-pressed="false"></button>
         <button class="icon-button record-toggle" id="recordButton" type="button" aria-label="Recording off" aria-pressed="false"></button>
       </header>
 
@@ -57,7 +58,7 @@
         <div class="file-actions" aria-label="Pocket Tracker file controls">
           <button id="saveProject" type="button">Save</button>
           <button id="loadProject" type="button">Load</button>
-          <input id="projectFileInput" type="file" accept=".pockettracker,application/json" hidden />
+          <input id="projectFileInput" type="file" accept=".pt,.pockettracker,application/json" hidden />
         </div>
         <button class="export-button" id="exportMp3" type="button">Export to MP3</button>
         <div class="sequence-builder" aria-label="Pattern sequence">
@@ -151,6 +152,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-    <script src="./app.js?v=20260510-1"></script>
+    <script src="./app.js?v=20260512-1"></script>
   </body>
 </html>
