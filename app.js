@@ -2755,7 +2755,7 @@ patternGrid.addEventListener("pointermove", (event) => {
 
   patternDidSwipe = true;
 
-  if (isPatternSwipeGesture(absTotalX, absTotalY)) {
+  if (!patternTouchStartedOnCell && isPatternSwipeGesture(absTotalX, absTotalY)) {
     return;
   }
 
@@ -2805,7 +2805,7 @@ patternGrid.addEventListener("pointerup", (event) => {
   const absTotalX = Math.abs(totalDeltaX);
   const absTotalY = Math.abs(totalDeltaY);
   if (isPatternSwipeGesture(absTotalX, absTotalY, { allowCompletedCellSwipe: true })) {
-    patternNavigatedBySwipe = movePatterns(totalDeltaX > 0 ? -1 : 1);
+    patternNavigatedBySwipe = movePatterns(totalDeltaX > 0 ? 1 : -1);
     patternDidSwipe = patternNavigatedBySwipe;
   } else if (!patternDidSwipe && absTotalX < 10 && absTotalY < 10) {
     const tappedCell = event.target.closest(".pattern-cell");
