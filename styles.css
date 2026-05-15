@@ -200,6 +200,20 @@ h2 {
   gap: 5px;
 }
 
+.pattern-name-button {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  text-align: left;
+}
+
+.pattern-name-button strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pattern-controls button,
 .sequence-slot,
 .bank-pattern {
@@ -396,6 +410,9 @@ h2 {
 
 .sequence-slot strong {
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sequence-slot.filled {
@@ -455,6 +472,8 @@ h2 {
 .bank-pattern strong {
   text-align: left;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11px;
 }
 

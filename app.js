@@ -11,6 +11,7 @@ const patternControls = document.querySelector("#patternControls");
 const patternToggleButton = document.querySelector("#patternToggleButton");
 const patternTitleToggle = document.querySelector("#patternTitleToggle");
 const patternAdd = document.querySelector("#patternAdd");
+const patternNameButton = document.querySelector("#patternNameButton");
 const rowsSelect = document.querySelector("#rowsSelect");
 const rowsMenu = document.querySelector("#rowsMenu");
 const saveProject = document.querySelector("#saveProject");
@@ -68,6 +69,7 @@ const cellDragDelay = 420;
 const rangeSelectTapWindow = 560;
 const cellDragAutoScrollEdge = 26;
 const cellDragAutoScrollInterval = 360;
+const patternSwipeThreshold = 118;
 const sequenceDragAutoScrollEdge = 28;
 const sequenceDragAutoScrollAmount = 32;
 const patternCopyHoldDelay = 1020;
@@ -98,6 +100,7 @@ let patternTouchLastX = 0;
 let patternTouchLastY = 0;
 let patternDidSwipe = false;
 let patternHandledTap = false;
+let patternNavigatedBySwipe = false;
 let cellDragTimer;
 let lastCellDragScrollAt = 0;
 let cellDragFirstVisibleRow = null;
@@ -134,9 +137,10 @@ let mutedChannels = Array(4).fill(false);
 let audioContext;
 const noiseBuffers = new Map();
 
-function createPattern(rows) {
+function createPattern(rows, name = "") {
   return {
     rows,
+    name,
     cells: Array.from({ length: rows }, () => Array(4).fill(emptyCell)),
   };
 }
@@ -144,8 +148,22 @@ function createPattern(rows) {
 function clonePattern(source) {
   return {
     rows: source.cells.length,
+    name: source.name ? `${source.name} copy` : "",
     cells: source.cells.map((row) => row.map((cell) => cell)),
   };
+}
+
+function sanitizePatternName(name) {
+  if (typeof name !== "string") return "";
+  return name.replace(/\s+/g, " ").trim().slice(0, 28);
+}
+
+function getDefaultPatternName(index) {
+  return `Pattern ${(index + 1).toString().padStart(2, "0")}`;
+}
+
+function getPatternDisplayName(index) {
+  return patterns[index]?.name || getDefaultPatternName(index);
 }
 
 function clampPatternPosition() {
@@ -588,6 +606,7 @@ function createPocketTrackerProject() {
       mutedChannels: [...mutedChannels],
     },
     patterns: patterns.map((item) => ({
+      name: item.name || "",
       rows: item.cells.length,
       cells: item.cells.map((row) => row.map((cell) => cell)),
     })),
@@ -639,7 +658,11 @@ function sanitizeProjectPattern(item) {
     return Array.from({ length: 4 }, (_, channel) => sanitizeProjectCell(sourceRow[channel]));
   });
 
-  return { rows: rowCount, cells };
+  return {
+    rows: rowCount,
+    name: sanitizePatternName(item.name),
+    cells,
+  };
 }
 
 function sanitizeProjectData(data) {
@@ -958,8 +981,9 @@ function renderSequencer() {
     ].filter(Boolean).join(" ");
     slot.type = "button";
     slot.dataset.step = step;
-    slot.innerHTML = `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>PATTERN ${(patternIndex + 1).toString().padStart(2, "0")}</strong>`;
-    slot.setAttribute("aria-label", `Sequence step ${step + 1}, pattern ${patternIndex + 1}`);
+    const displayName = getPatternDisplayName(patternIndex);
+    slot.innerHTML = `<span>${(step + 1).toString().padStart(2, "0")}</span><strong>${displayName}</strong>`;
+    slot.setAttribute("aria-label", `Sequence step ${step + 1}, ${displayName}`);
     sequenceLane.append(slot);
   });
 
@@ -980,8 +1004,9 @@ function renderSequencer() {
     pad.type = "button";
     pad.draggable = false;
     pad.dataset.pattern = index;
-    pad.innerHTML = `<strong>PATTERN ${(index + 1).toString().padStart(2, "0")}</strong><span>${item.cells.length}</span>`;
-    pad.setAttribute("aria-label", `Pattern ${index + 1}`);
+    const displayName = getPatternDisplayName(index);
+    pad.innerHTML = `<strong>${displayName}</strong><span>${item.cells.length}</span>`;
+    pad.setAttribute("aria-label", displayName);
     patternBank.append(pad);
   });
   updateScrollRails();
@@ -1987,6 +2012,16 @@ function moveChannels(delta) {
   renderPattern();
 }
 
+function movePatterns(delta) {
+  if (patterns.length <= 1) return false;
+
+  const nextIndex = Math.min(Math.max(activePatternIndex + delta, 0), patterns.length - 1);
+  if (nextIndex === activePatternIndex) return false;
+
+  switchPattern(nextIndex);
+  return true;
+}
+
 function syncReadouts() {
   clampPatternPosition();
   const parsed = parseCell(pattern[activeRow][activeChannel]);
@@ -1997,8 +2032,10 @@ function syncReadouts() {
 
   bpmReadout.textContent = bpm.toString();
   bpmSlider.value = bpm.toString();
-  patternReadout.textContent = (activePatternIndex + 1).toString().padStart(2, "0");
-  patternLabel.textContent = `Pattern ${(activePatternIndex + 1).toString().padStart(2, "0")}`;
+  const activePatternName = getPatternDisplayName(activePatternIndex);
+  patternReadout.textContent = activePatternName;
+  patternNameButton.setAttribute("aria-label", `Rename ${activePatternName}`);
+  patternLabel.textContent = activePatternName;
   rowsReadout.textContent = pattern.length.toString();
   if (!rowsMenu.hidden) {
     renderRowsMenu();
@@ -2092,10 +2129,25 @@ function copyPattern(index) {
   if (!Number.isInteger(index) || !patterns[index]) return;
 
   patterns.push(clonePattern(patterns[index]));
+  if (patterns[patterns.length - 1].name.length > 28) {
+    patterns[patterns.length - 1].name = sanitizePatternName(patterns[patterns.length - 1].name);
+  }
   nextPatternRows = patterns[patterns.length - 1].cells.length;
   normalizeSequence();
   switchPattern(patterns.length - 1);
   showCopyStatus(`Pattern ${(index + 1).toString().padStart(2, "0")} copied.`);
+}
+
+function renameActivePattern() {
+  const currentName = patterns[activePatternIndex]?.name || "";
+  const requestedName = window.prompt("Name this pattern:", currentName || getDefaultPatternName(activePatternIndex));
+  if (requestedName === null) return;
+
+  patterns[activePatternIndex].name = sanitizePatternName(requestedName);
+  const displayName = getPatternDisplayName(activePatternIndex);
+  showCopyStatus(patterns[activePatternIndex].name ? `Renamed to ${displayName}.` : "Pattern name reset.");
+  syncReadouts();
+  renderSequencer();
 }
 
 function deletePattern(index) {
@@ -2301,6 +2353,7 @@ sampleDeck.addEventListener("click", (event) => {
 });
 
 patternAdd.addEventListener("click", addPattern);
+patternNameButton.addEventListener("click", renameActivePattern);
 saveProject.addEventListener("click", savePocketTrackerProject);
 loadProject.addEventListener("click", () => projectFileInput.click());
 projectFileInput.addEventListener("change", () => {
@@ -2601,6 +2654,7 @@ patternGrid.addEventListener("pointerdown", (event) => {
   patternTouchLastY = event.clientY;
   patternDidSwipe = false;
   patternHandledTap = false;
+  patternNavigatedBySwipe = false;
   window.clearTimeout(cellDragTimer);
 
   if (isRangeSelectionArmed && selectionStartCell) {
@@ -2668,14 +2722,6 @@ patternGrid.addEventListener("pointermove", (event) => {
     window.clearTimeout(cellDragTimer);
   }
 
-  if (absX >= 26 && absX > absY * 1.2) {
-    patternDidSwipe = true;
-    moveChannels(deltaX < 0 ? 1 : -1);
-    patternTouchLastX = event.clientX;
-    patternTouchLastY = event.clientY;
-    return;
-  }
-
   if (absY < 18 || absY <= absX) return;
 
   patternDidSwipe = true;
@@ -2713,7 +2759,10 @@ patternGrid.addEventListener("pointerup", (event) => {
   const totalDeltaY = event.clientY - patternTouchStartY;
   const absTotalX = Math.abs(totalDeltaX);
   const absTotalY = Math.abs(totalDeltaY);
-  if (absTotalX > 58 && absTotalX > absTotalY * 1.2) {
+  if (absTotalX > patternSwipeThreshold && absTotalX > absTotalY * 1.25) {
+    patternNavigatedBySwipe = movePatterns(totalDeltaX > 0 ? 1 : -1);
+    patternDidSwipe = patternNavigatedBySwipe;
+  } else if (absTotalX > 58 && absTotalX > absTotalY * 1.2) {
     patternDidSwipe = true;
     moveChannels(totalDeltaX < 0 ? 1 : -1);
   } else if (absTotalY > 52 && absTotalY > absTotalX) {
