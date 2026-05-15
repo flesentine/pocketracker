@@ -69,7 +69,10 @@ const cellDragDelay = 420;
 const rangeSelectTapWindow = 560;
 const cellDragAutoScrollEdge = 26;
 const cellDragAutoScrollInterval = 360;
-const patternSwipeThreshold = 118;
+const cellNavAutoScrollInterval = 90;
+const patternSwipeThreshold = 82;
+const patternCellSwipeThreshold = 108;
+const patternCellSwipeMaxDuration = 360;
 const sequenceDragAutoScrollEdge = 28;
 const sequenceDragAutoScrollAmount = 32;
 const patternCopyHoldDelay = 1020;
@@ -96,11 +99,14 @@ let isPatternLooping = true;
 let timer;
 let patternTouchStartX = 0;
 let patternTouchStartY = 0;
+let patternTouchStartAt = 0;
 let patternTouchLastX = 0;
 let patternTouchLastY = 0;
 let patternDidSwipe = false;
 let patternHandledTap = false;
 let patternNavigatedBySwipe = false;
+let patternMovedAcrossCells = false;
+let patternTouchStartedOnCell = false;
 let cellDragTimer;
 let lastCellDragScrollAt = 0;
 let cellDragFirstVisibleRow = null;
@@ -1146,19 +1152,7 @@ function beginRangeSelection(row, channel, anchorX = patternTouchStartX) {
 function updateRangeSelection(clientX, clientY, { allowAutoScroll = true } = {}) {
   if (!isSelectingRange || !selectionStartCell) return;
 
-  const gridRect = patternGrid.getBoundingClientRect();
-  const now = window.performance.now();
-  const canAutoScroll = now - lastCellDragScrollAt >= cellDragAutoScrollInterval;
-  if (allowAutoScroll && canAutoScroll && clientY < gridRect.top + cellDragAutoScrollEdge) {
-    cellDragFirstVisibleRow = Math.max(0, getFirstVisibleRow() - 1);
-    renderPattern();
-    lastCellDragScrollAt = now;
-  } else if (allowAutoScroll && canAutoScroll && clientY > gridRect.bottom - cellDragAutoScrollEdge) {
-    const maxFirstRow = Math.max(0, pattern.length - getVisiblePatternRows());
-    cellDragFirstVisibleRow = Math.min(maxFirstRow, getFirstVisibleRow() + 1);
-    renderPattern();
-    lastCellDragScrollAt = now;
-  }
+  scrollPatternViewportAtEdge(clientY, { allowAutoScroll });
 
   const target = getPatternCellFromPoint(clientX, clientY);
   if (!target) return;
@@ -1175,6 +1169,33 @@ function updateRangeSelection(clientX, clientY, { allowAutoScroll = true } = {})
   activeChannel = target.channel;
   syncReadouts();
   renderPattern();
+}
+
+function scrollPatternViewportAtEdge(
+  clientY,
+  { allowAutoScroll = true, interval = cellDragAutoScrollInterval } = {},
+) {
+  if (!allowAutoScroll) return false;
+
+  const gridRect = patternGrid.getBoundingClientRect();
+  const now = window.performance.now();
+  const canAutoScroll = now - lastCellDragScrollAt >= interval;
+  if (canAutoScroll && clientY < gridRect.top + cellDragAutoScrollEdge) {
+    cellDragFirstVisibleRow = Math.max(0, getFirstVisibleRow() - 1);
+    renderPattern();
+    lastCellDragScrollAt = now;
+    return true;
+  }
+
+  if (canAutoScroll && clientY > gridRect.bottom - cellDragAutoScrollEdge) {
+    const maxFirstRow = Math.max(0, pattern.length - getVisiblePatternRows());
+    cellDragFirstVisibleRow = Math.min(maxFirstRow, getFirstVisibleRow() + 1);
+    renderPattern();
+    lastCellDragScrollAt = now;
+    return true;
+  }
+
+  return false;
 }
 
 function armRangeSelection() {
@@ -1931,19 +1952,7 @@ function beginCellDrag(row, channel) {
 function updateCellDrag(clientX, clientY) {
   if (!isDraggingCell || !draggedCell) return;
 
-  const gridRect = patternGrid.getBoundingClientRect();
-  const now = window.performance.now();
-  const canAutoScroll = now - lastCellDragScrollAt >= cellDragAutoScrollInterval;
-  if (canAutoScroll && clientY < gridRect.top + cellDragAutoScrollEdge) {
-    cellDragFirstVisibleRow = Math.max(0, getFirstVisibleRow() - 1);
-    renderPattern();
-    lastCellDragScrollAt = now;
-  } else if (canAutoScroll && clientY > gridRect.bottom - cellDragAutoScrollEdge) {
-    const maxFirstRow = Math.max(0, pattern.length - getVisiblePatternRows());
-    cellDragFirstVisibleRow = Math.min(maxFirstRow, getFirstVisibleRow() + 1);
-    renderPattern();
-    lastCellDragScrollAt = now;
-  }
+  scrollPatternViewportAtEdge(clientY);
 
   const target = getPatternCellFromPoint(clientX, clientY);
   if (!target) return;
@@ -2020,6 +2029,22 @@ function movePatterns(delta) {
 
   switchPattern(nextIndex);
   return true;
+}
+
+function isPatternSwipeGesture(absTotalX, absTotalY, { allowCompletedCellSwipe = false } = {}) {
+  const gestureDuration = window.performance.now() - patternTouchStartAt;
+
+  if (patternMovedAcrossCells && !allowCompletedCellSwipe) return false;
+
+  if (patternTouchStartedOnCell) {
+    return (
+      gestureDuration <= patternCellSwipeMaxDuration &&
+      absTotalX > patternCellSwipeThreshold &&
+      absTotalX > absTotalY * 1.25
+    );
+  }
+
+  return absTotalX > patternSwipeThreshold && absTotalX > absTotalY * 0.8;
 }
 
 function syncReadouts() {
@@ -2650,11 +2675,15 @@ patternGrid.addEventListener("pointerdown", (event) => {
 
   patternTouchStartX = event.clientX;
   patternTouchStartY = event.clientY;
+  patternTouchStartAt = window.performance.now();
   patternTouchLastX = event.clientX;
   patternTouchLastY = event.clientY;
   patternDidSwipe = false;
   patternHandledTap = false;
   patternNavigatedBySwipe = false;
+  patternMovedAcrossCells = false;
+  patternTouchStartedOnCell = Boolean(touchedCell);
+  lastCellDragScrollAt = 0;
   window.clearTimeout(cellDragTimer);
 
   if (isRangeSelectionArmed && selectionStartCell) {
@@ -2703,10 +2732,10 @@ patternGrid.addEventListener("pointermove", (event) => {
     return;
   }
 
-  const deltaX = event.clientX - patternTouchLastX;
-  const deltaY = event.clientY - patternTouchLastY;
-  const absX = Math.abs(deltaX);
-  const absY = Math.abs(deltaY);
+  const totalDeltaX = event.clientX - patternTouchStartX;
+  const totalDeltaY = event.clientY - patternTouchStartY;
+  const absTotalX = Math.abs(totalDeltaX);
+  const absTotalY = Math.abs(totalDeltaY);
 
   if (isDraggingCell) {
     updateCellDrag(event.clientX, event.clientY);
@@ -2716,16 +2745,32 @@ patternGrid.addEventListener("pointermove", (event) => {
   }
 
   if (
-    Math.abs(event.clientX - patternTouchStartX) > 10 ||
-    Math.abs(event.clientY - patternTouchStartY) > 10
+    absTotalX > 10 ||
+    absTotalY > 10
   ) {
     window.clearTimeout(cellDragTimer);
   }
 
-  if (absY < 18 || absY <= absX) return;
+  if (absTotalX <= 10 && absTotalY <= 10) return;
 
   patternDidSwipe = true;
-  moveRows(deltaY > 0 ? -1 : 1);
+
+  if (isPatternSwipeGesture(absTotalX, absTotalY)) {
+    return;
+  }
+
+  if (!patternTouchStartedOnCell) return;
+
+  scrollPatternViewportAtEdge(event.clientY, { interval: cellNavAutoScrollInterval });
+
+  const target = getPatternCellFromPoint(event.clientX, event.clientY);
+  if (!target) return;
+
+  if (target.row !== activeRow || target.channel !== activeChannel) {
+    patternMovedAcrossCells = true;
+    selectPatternCell(target.row, target.channel);
+  }
+
   patternTouchLastX = event.clientX;
   patternTouchLastY = event.clientY;
 });
@@ -2759,15 +2804,9 @@ patternGrid.addEventListener("pointerup", (event) => {
   const totalDeltaY = event.clientY - patternTouchStartY;
   const absTotalX = Math.abs(totalDeltaX);
   const absTotalY = Math.abs(totalDeltaY);
-  if (absTotalX > patternSwipeThreshold && absTotalX > absTotalY * 1.25) {
-    patternNavigatedBySwipe = movePatterns(totalDeltaX > 0 ? 1 : -1);
+  if (isPatternSwipeGesture(absTotalX, absTotalY, { allowCompletedCellSwipe: true })) {
+    patternNavigatedBySwipe = movePatterns(totalDeltaX > 0 ? -1 : 1);
     patternDidSwipe = patternNavigatedBySwipe;
-  } else if (absTotalX > 58 && absTotalX > absTotalY * 1.2) {
-    patternDidSwipe = true;
-    moveChannels(totalDeltaX < 0 ? 1 : -1);
-  } else if (absTotalY > 52 && absTotalY > absTotalX) {
-    patternDidSwipe = true;
-    moveRows(totalDeltaY > 0 ? -2 : 2);
   } else if (!patternDidSwipe && absTotalX < 10 && absTotalY < 10) {
     const tappedCell = event.target.closest(".pattern-cell");
     if (tappedCell) {
