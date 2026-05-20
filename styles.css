@@ -680,9 +680,60 @@ h2 {
 .pattern-panel {
   grid-area: pattern;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+}
+
+.pattern-nav {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  background: #111619;
+}
+
+.pattern-step-button,
+.pattern-current-button {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: #20282d;
+  color: var(--amber);
+}
+
+.pattern-step-button {
+  min-height: 34px;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.pattern-step-button:disabled {
+  color: rgba(141, 154, 155, 0.35);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.pattern-current-button {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-height: 34px;
+  text-align: center;
+}
+
+.pattern-current-button span {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.pattern-current-button strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cyan);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .channel-head,

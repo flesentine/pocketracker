@@ -5,11 +5,15 @@ const bpmReadout = document.querySelector("#bpmReadout");
 const channelReadout = document.querySelector("#channelReadout");
 const octaveReadout = document.querySelector("#octaveReadout");
 const patternReadout = document.querySelector("#patternReadout");
+const patternNavReadout = document.querySelector("#patternNavReadout");
 const rowsReadout = document.querySelector("#rowsReadout");
 const patternLabel = document.querySelector(".top-bar .eyebrow");
 const patternControls = document.querySelector("#patternControls");
 const patternToggleButton = document.querySelector("#patternToggleButton");
 const patternTitleToggle = document.querySelector("#patternTitleToggle");
+const patternCurrentButton = document.querySelector("#patternCurrentButton");
+const patternPrev = document.querySelector("#patternPrev");
+const patternNext = document.querySelector("#patternNext");
 const patternAdd = document.querySelector("#patternAdd");
 const patternNameButton = document.querySelector("#patternNameButton");
 const rowsSelect = document.querySelector("#rowsSelect");
@@ -70,9 +74,6 @@ const rangeSelectTapWindow = 560;
 const cellDragAutoScrollEdge = 26;
 const cellDragAutoScrollInterval = 360;
 const cellNavAutoScrollInterval = 90;
-const patternSwipeThreshold = 82;
-const patternCellSwipeThreshold = 108;
-const patternCellSwipeMaxDuration = 360;
 const sequenceDragAutoScrollEdge = 28;
 const sequenceDragAutoScrollAmount = 32;
 const patternCopyHoldDelay = 1020;
@@ -99,13 +100,10 @@ let isPatternLooping = true;
 let timer;
 let patternTouchStartX = 0;
 let patternTouchStartY = 0;
-let patternTouchStartAt = 0;
 let patternTouchLastX = 0;
 let patternTouchLastY = 0;
 let patternDidSwipe = false;
 let patternHandledTap = false;
-let patternNavigatedBySwipe = false;
-let patternMovedAcrossCells = false;
 let patternTouchStartedOnCell = false;
 let cellDragTimer;
 let lastCellDragScrollAt = 0;
@@ -2031,22 +2029,6 @@ function movePatterns(delta) {
   return true;
 }
 
-function isPatternSwipeGesture(absTotalX, absTotalY, { allowCompletedCellSwipe = false } = {}) {
-  const gestureDuration = window.performance.now() - patternTouchStartAt;
-
-  if (patternMovedAcrossCells && !allowCompletedCellSwipe) return false;
-
-  if (patternTouchStartedOnCell) {
-    return (
-      gestureDuration <= patternCellSwipeMaxDuration &&
-      absTotalX > patternCellSwipeThreshold &&
-      absTotalX > absTotalY * 1.25
-    );
-  }
-
-  return absTotalX > patternSwipeThreshold && absTotalX > absTotalY * 0.8;
-}
-
 function syncReadouts() {
   clampPatternPosition();
   const parsed = parseCell(pattern[activeRow][activeChannel]);
@@ -2059,8 +2041,17 @@ function syncReadouts() {
   bpmSlider.value = bpm.toString();
   const activePatternName = getPatternDisplayName(activePatternIndex);
   patternReadout.textContent = activePatternName;
+  patternNavReadout.textContent = activePatternName;
   patternNameButton.setAttribute("aria-label", `Rename ${activePatternName}`);
   patternLabel.textContent = activePatternName;
+  patternPrev.disabled = activePatternIndex === 0;
+  patternNext.disabled = activePatternIndex === patterns.length - 1;
+  patternPrev.setAttribute("aria-label", activePatternIndex === 0
+    ? "Already at first pattern"
+    : `Previous pattern, ${getPatternDisplayName(activePatternIndex - 1)}`);
+  patternNext.setAttribute("aria-label", activePatternIndex === patterns.length - 1
+    ? "Already at last pattern"
+    : `Next pattern, ${getPatternDisplayName(activePatternIndex + 1)}`);
   rowsReadout.textContent = pattern.length.toString();
   if (!rowsMenu.hidden) {
     renderRowsMenu();
@@ -2379,6 +2370,9 @@ sampleDeck.addEventListener("click", (event) => {
 
 patternAdd.addEventListener("click", addPattern);
 patternNameButton.addEventListener("click", renameActivePattern);
+patternPrev.addEventListener("click", () => movePatterns(-1));
+patternNext.addEventListener("click", () => movePatterns(1));
+patternCurrentButton.addEventListener("click", togglePatternControls);
 saveProject.addEventListener("click", savePocketTrackerProject);
 loadProject.addEventListener("click", () => projectFileInput.click());
 projectFileInput.addEventListener("change", () => {
@@ -2675,13 +2669,10 @@ patternGrid.addEventListener("pointerdown", (event) => {
 
   patternTouchStartX = event.clientX;
   patternTouchStartY = event.clientY;
-  patternTouchStartAt = window.performance.now();
   patternTouchLastX = event.clientX;
   patternTouchLastY = event.clientY;
   patternDidSwipe = false;
   patternHandledTap = false;
-  patternNavigatedBySwipe = false;
-  patternMovedAcrossCells = false;
   patternTouchStartedOnCell = Boolean(touchedCell);
   lastCellDragScrollAt = 0;
   window.clearTimeout(cellDragTimer);
@@ -2755,10 +2746,6 @@ patternGrid.addEventListener("pointermove", (event) => {
 
   patternDidSwipe = true;
 
-  if (!patternTouchStartedOnCell && isPatternSwipeGesture(absTotalX, absTotalY)) {
-    return;
-  }
-
   if (!patternTouchStartedOnCell) return;
 
   scrollPatternViewportAtEdge(event.clientY, { interval: cellNavAutoScrollInterval });
@@ -2767,7 +2754,6 @@ patternGrid.addEventListener("pointermove", (event) => {
   if (!target) return;
 
   if (target.row !== activeRow || target.channel !== activeChannel) {
-    patternMovedAcrossCells = true;
     selectPatternCell(target.row, target.channel);
   }
 
@@ -2804,10 +2790,7 @@ patternGrid.addEventListener("pointerup", (event) => {
   const totalDeltaY = event.clientY - patternTouchStartY;
   const absTotalX = Math.abs(totalDeltaX);
   const absTotalY = Math.abs(totalDeltaY);
-  if (isPatternSwipeGesture(absTotalX, absTotalY, { allowCompletedCellSwipe: true })) {
-    patternNavigatedBySwipe = movePatterns(totalDeltaX > 0 ? 1 : -1);
-    patternDidSwipe = patternNavigatedBySwipe;
-  } else if (!patternDidSwipe && absTotalX < 10 && absTotalY < 10) {
+  if (!patternDidSwipe && absTotalX < 10 && absTotalY < 10) {
     const tappedCell = event.target.closest(".pattern-cell");
     if (tappedCell) {
       patternHandledTap = true;
