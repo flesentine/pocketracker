@@ -148,14 +148,14 @@ button {
 .top-bar {
   grid-area: top;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto 44px 44px;
+  grid-template-columns: 42px minmax(0, 1fr) auto 44px 44px 48px;
   align-items: center;
   gap: 7px;
   padding: 7px;
 }
 
 .top-bar:has(.top-loop-button[hidden]) {
-  grid-template-columns: 42px minmax(0, 1fr) auto 44px;
+  grid-template-columns: 42px minmax(0, 1fr) auto 44px 48px;
 }
 
 .title-toggle {
@@ -304,19 +304,19 @@ h2 {
   text-transform: uppercase;
 }
 
-.save-menu {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.save-menu button {
-  min-height: 30px;
-  padding: 4px 6px;
+.pattern-controls .export-button {
+  min-height: 26px;
+  padding: 4px 8px;
   border-color: rgba(71, 215, 198, 0.42);
   background: rgba(71, 215, 198, 0.08);
   color: var(--cyan);
   text-transform: uppercase;
+}
+
+.pattern-controls .export-button:disabled {
+  color: var(--muted);
+  border-color: rgba(48, 57, 64, 0.95);
+  background: rgba(32, 38, 43, 0.72);
 }
 
 .pattern-toolbar div,
@@ -1243,7 +1243,7 @@ h2 {
 
 .transport {
   display: grid;
-  grid-template-columns: 1fr 1.35fr 1fr 48px;
+  grid-template-columns: 1fr 1.45fr 1fr;
   gap: 6px;
 }
 
@@ -1255,17 +1255,6 @@ h2 {
 
 .transport .secondary {
   color: var(--amber);
-}
-
-.transport .record-toggle {
-  min-height: 43px;
-  border: 0;
-  background:
-    url("./assets/record-button-off.png") center / contain no-repeat;
-}
-
-.transport .record-toggle.recording {
-  background-image: url("./assets/record-button-on.png");
 }
 
 .playing .top-bar {

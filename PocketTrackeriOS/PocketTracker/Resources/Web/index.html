@@ -26,7 +26,7 @@
       content="A pocket-sized old-school tracker for making patterns with synth drums, bass, leads, and piano-style note entry."
     />
     <meta name="twitter:image" content="https://flesentine.github.io/pocketracker/og-image.png?v=20260506-11" />
-    <link rel="stylesheet" href="./styles.css?v=20260524-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260519-3" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Pocket tracker prototype">
@@ -36,9 +36,10 @@
           <p class="eyebrow">Pattern 01</p>
           <h1>Pocket Tracker</h1>
         </div>
-        <span class="version-stamp" aria-label="Build version">v2026.05.24.3</span>
+        <span class="version-stamp" aria-label="Build version">v2026.05.19.3</span>
         <button id="patternLoopToggle" class="icon-button loop-toggle top-loop-button" aria-label="Toggle pattern loop" hidden></button>
         <button class="icon-button metronome-toggle" id="metronomeButton" type="button" aria-label="Metronome off" aria-pressed="false"></button>
+        <button class="icon-button record-toggle" id="recordButton" type="button" aria-label="Recording off" aria-pressed="false"></button>
       </header>
 
       <section class="pattern-controls" id="patternControls" aria-label="Pattern controls" hidden>
@@ -59,11 +60,7 @@
           <button id="loadProject" type="button">Load</button>
           <input id="projectFileInput" type="file" accept=".pt,.pockettracker,application/json" hidden />
         </div>
-        <div class="save-menu" id="saveMenu" aria-label="Save format" hidden>
-          <button type="button" data-save-format="pt">Pocket Tracker</button>
-          <button type="button" data-save-format="midi">MIDI</button>
-          <button type="button" data-save-format="mp3">MP3</button>
-        </div>
+        <button class="export-button" id="exportMp3" type="button">Export to MP3</button>
         <div class="sequence-builder" aria-label="Pattern sequence">
           <div class="sequence-lane" id="sequenceLane" aria-label="Playback sequence"></div>
           <div class="pattern-bank" id="patternBank" aria-label="Available patterns"></div>
@@ -158,12 +155,11 @@
           <button class="secondary" id="octaveDown">OCT -</button>
           <button class="play" id="playButton">Play</button>
           <button class="secondary" id="octaveUp">OCT +</button>
-          <button class="icon-button record-toggle" id="recordButton" type="button" aria-label="Recording off" aria-pressed="false"></button>
         </div>
       </section>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-    <script src="./app.js?v=20260524-3"></script>
+    <script src="./vendor/lame.min.js"></script>
+    <script src="./app.js?v=20260519-3"></script>
   </body>
 </html>

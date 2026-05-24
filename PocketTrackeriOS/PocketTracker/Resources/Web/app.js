@@ -20,8 +20,8 @@ const rowsSelect = document.querySelector("#rowsSelect");
 const rowsMenu = document.querySelector("#rowsMenu");
 const saveProject = document.querySelector("#saveProject");
 const loadProject = document.querySelector("#loadProject");
-const saveMenu = document.querySelector("#saveMenu");
 const projectFileInput = document.querySelector("#projectFileInput");
+const exportMp3 = document.querySelector("#exportMp3");
 const patternLoopToggle = document.querySelector("#patternLoopToggle");
 const sequenceLane = document.querySelector("#sequenceLane");
 const patternBank = document.querySelector("#patternBank");
@@ -156,7 +156,7 @@ function askText({ title, value = "", placeholder = "", confirmLabel = "Done" })
           <input type="text" maxlength="28" />
         </label>
         <div class="text-dialog-actions">
-          <button class="secondary" type="button" data-cancel>Close</button>
+          <button class="secondary" type="button" data-cancel>Cancel</button>
           <button type="submit"></button>
         </div>
       </form>
@@ -620,7 +620,7 @@ function encodeMp3(audioBuffer) {
   const right = audioBuffer.numberOfChannels > 1
     ? floatTo16BitPcm(audioBuffer.getChannelData(1))
     : left;
-  const encoder = new window.lamejs.Mp3Encoder(2, audioBuffer.sampleRate, 192);
+  const encoder = new window.lamejs.Mp3Encoder(2, audioBuffer.sampleRate, 128);
   const chunks = [];
   const blockSize = 1152;
 
@@ -636,28 +636,6 @@ function encodeMp3(audioBuffer) {
   if (finalChunk.length > 0) chunks.push(finalChunk);
 
   return new Blob(chunks, { type: "audio/mpeg" });
-}
-
-function normalizeAudioBuffer(audioBuffer) {
-  let peak = 0;
-  for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
-    const data = audioBuffer.getChannelData(channel);
-    for (let index = 0; index < data.length; index += 1) {
-      peak = Math.max(peak, Math.abs(data[index]));
-    }
-  }
-
-  if (peak <= 0) return audioBuffer;
-
-  const gain = Math.min(0.92 / peak, 1);
-  for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
-    const data = audioBuffer.getChannelData(channel);
-    for (let index = 0; index < data.length; index += 1) {
-      data[index] *= gain;
-    }
-  }
-
-  return audioBuffer;
 }
 
 async function downloadBlob(blob, filename) {
@@ -725,20 +703,6 @@ function sanitizeProjectFilename(name) {
   return safeName ? `${safeName}.pt` : "";
 }
 
-function sanitizeExportFilename(name, extension) {
-  const trimmed = name.trim();
-  if (!trimmed) return "";
-
-  const extensionPattern = new RegExp(`\\.${extension}$`, "i");
-  const withoutExtension = trimmed.replace(extensionPattern, "");
-  const safeName = withoutExtension
-    .replace(/[\\/:*?"<>|]+/g, "-")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return safeName ? `${safeName}.${extension}` : "";
-}
-
 async function savePocketTrackerProject() {
   const requestedName = await askText({
     title: "Name this Pocket Tracker file",
@@ -758,176 +722,6 @@ async function savePocketTrackerProject() {
   });
   await downloadBlob(blob, filename);
   showCopyStatus(isPocketTrackerIOS() ? "Pocket Tracker file ready to share." : "Pocket Tracker file saved.");
-}
-
-function writeVariableLengthQuantity(value) {
-  let buffer = value & 0x7f;
-  const bytes = [];
-  while ((value >>= 7)) {
-    buffer <<= 8;
-    buffer |= ((value & 0x7f) | 0x80);
-  }
-
-  while (true) {
-    bytes.push(buffer & 0xff);
-    if (buffer & 0x80) {
-      buffer >>= 8;
-    } else {
-      break;
-    }
-  }
-
-  return bytes;
-}
-
-function writeAscii(target, text) {
-  for (let index = 0; index < text.length; index += 1) {
-    target.push(text.charCodeAt(index));
-  }
-}
-
-function writeUint16(target, value) {
-  target.push((value >> 8) & 0xff, value & 0xff);
-}
-
-function writeUint32(target, value) {
-  target.push((value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
-}
-
-function writeUint24(value) {
-  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
-}
-
-function createMidiTrack(events) {
-  const track = [];
-  let lastTick = 0;
-  events
-    .sort((a, b) => a.tick - b.tick || a.order - b.order)
-    .forEach((event) => {
-      track.push(...writeVariableLengthQuantity(event.tick - lastTick), ...event.bytes);
-      lastTick = event.tick;
-    });
-
-  const bytes = [];
-  writeAscii(bytes, "MTrk");
-  writeUint32(bytes, track.length);
-  bytes.push(...track);
-  return bytes;
-}
-
-function createTrackNameEvent(name) {
-  const bytes = [];
-  writeAscii(bytes, name);
-  return [0xff, 0x03, bytes.length, ...bytes];
-}
-
-function trackerNoteToMidiNote(note) {
-  const match = note.match(/^([A-G])([#-])(\d)$/);
-  if (!match) return null;
-
-  const [, letter, accidental, octaveValue] = match;
-  const semitones = {
-    "C-": 0,
-    "C#": 1,
-    "D-": 2,
-    "D#": 3,
-    "E-": 4,
-    "F-": 5,
-    "F#": 6,
-    "G-": 7,
-    "G#": 8,
-    "A-": 9,
-    "A#": 10,
-    "B-": 11,
-  };
-  const midiNote = (Number(octaveValue) + 1) * 12 + semitones[`${letter}${accidental}`];
-  return Math.min(127, Math.max(0, midiNote));
-}
-
-function createMidiBlob() {
-  const ticksPerBeat = 480;
-  const ticksPerRow = ticksPerBeat / 4;
-  const sequence = getSongExportSequence();
-  const trackDefinitions = [
-    { sample: "01", name: "Kick", channel: 9, program: null, drumNote: 36 },
-    { sample: "02", name: "Snare", channel: 9, program: null, drumNote: 38 },
-    { sample: "05", name: "Hat", channel: 9, program: null, drumNote: 42 },
-    { sample: "03", name: "Bassline", channel: 0, program: 38 },
-    { sample: "04", name: "Lead", channel: 1, program: 80 },
-    { sample: "06", name: "Pluck", channel: 2, program: 45 },
-    { sample: "07", name: "Chord", channel: 3, program: 88 },
-    { sample: "08", name: "Bell", channel: 4, program: 14 },
-  ];
-  const trackBySample = new Map(trackDefinitions.map((definition) => [definition.sample, definition]));
-  const eventsBySample = new Map(trackDefinitions.map((definition) => [
-    definition.sample,
-    [
-      { tick: 0, order: 0, bytes: createTrackNameEvent(definition.name) },
-      ...(definition.program === null
-        ? []
-        : [{ tick: 0, order: 1, bytes: [0xc0 + definition.channel, definition.program] }]),
-    ],
-  ]));
-  let cursor = 0;
-
-  sequence.forEach((songPattern) => {
-    songPattern.cells.forEach((row) => {
-      row.forEach((cell, channelIndex) => {
-        if (mutedChannels[channelIndex]) return;
-
-        const parsed = parseCell(cell);
-        const definition = parsed ? trackBySample.get(parsed.sample) : null;
-        if (!definition) return;
-
-        const midiNote = definition.drumNote ?? trackerNoteToMidiNote(parsed.note);
-        if (midiNote === null) return;
-
-        const velocity = Math.min(127, Math.max(1, Math.round(volumeToGain(parsed.volume) * 127)));
-        const events = eventsBySample.get(parsed.sample);
-        events.push({ tick: cursor, order: 4, bytes: [0x90 + definition.channel, midiNote, velocity] });
-        events.push({ tick: cursor + ticksPerRow, order: 3, bytes: [0x80 + definition.channel, midiNote, 0] });
-      });
-      cursor += ticksPerRow;
-    });
-  });
-
-  const tempoTrack = createMidiTrack([
-    { tick: 0, order: 0, bytes: createTrackNameEvent("Pocket Tracker Tempo") },
-    { tick: 0, order: 1, bytes: [0xff, 0x51, 0x03, ...writeUint24(Math.round(60000000 / bpm))] },
-    { tick: 0, order: 2, bytes: [0xff, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08] },
-    { tick: cursor + ticksPerRow, order: 9, bytes: [0xff, 0x2f, 0x00] },
-  ]);
-  const noteTracks = trackDefinitions.map((definition) => createMidiTrack([
-    ...eventsBySample.get(definition.sample),
-    { tick: cursor + ticksPerRow, order: 9, bytes: [0xff, 0x2f, 0x00] },
-  ]));
-
-  const bytes = [];
-  writeAscii(bytes, "MThd");
-  writeUint32(bytes, 6);
-  writeUint16(bytes, 1);
-  writeUint16(bytes, 1 + noteTracks.length);
-  writeUint16(bytes, ticksPerBeat);
-  bytes.push(...tempoTrack, ...noteTracks.flat());
-  return new Blob([new Uint8Array(bytes)], { type: "audio/midi" });
-}
-
-async function saveMidiFile() {
-  const requestedName = await askText({
-    title: "Name this MIDI file",
-    value: "pocket-tracker",
-    confirmLabel: "Save",
-  });
-  if (requestedName === null) return;
-
-  const filename = sanitizeExportFilename(requestedName, "mid");
-  if (!filename) {
-    showCopyStatus("MIDI was not saved.");
-    return;
-  }
-
-  await downloadBlob(createMidiBlob(), filename);
-  showCopyStatus(isPocketTrackerIOS() ? "MIDI ready to share." : "MIDI saved.");
 }
 
 function sanitizeProjectCell(cell) {
@@ -1051,36 +845,31 @@ async function exportSongToMp3() {
     return;
   }
 
-  const requestedName = await askText({
-    title: "Name this MP3 file",
-    value: "pocket-tracker",
-    confirmLabel: "Save",
-  });
-  if (requestedName === null) return;
-
-  const filename = sanitizeExportFilename(requestedName, "mp3");
-  if (!filename) {
-    showCopyStatus("MP3 was not saved.");
-    return;
-  }
-
   const sequence = getSongExportSequence();
   const sampleRate = 44100;
   const rowCount = sequence.reduce((total, songPattern) => total + songPattern.cells.length, 0);
   const tailSeconds = 1;
   const durationSeconds = Math.max(1, (rowCount * getRowDuration()) / 1000 + tailSeconds);
   const exportContext = new OfflineEngine(2, Math.ceil(durationSeconds * sampleRate), sampleRate);
-    showCopyStatus("Rendering MP3...");
+  const originalLabel = exportMp3.textContent;
+
+  exportMp3.disabled = true;
+  exportMp3.textContent = "Exporting...";
+  showCopyStatus("Rendering MP3...");
 
   try {
     scheduleSongRender(exportContext, sequence);
     const renderedBuffer = await exportContext.startRendering();
-    const blob = encodeMp3(normalizeAudioBuffer(renderedBuffer));
-    await downloadBlob(blob, filename);
-    showCopyStatus(isPocketTrackerIOS() ? "MP3 ready to share." : "MP3 saved.");
+    const blob = encodeMp3(renderedBuffer);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    await downloadBlob(blob, `pocket-tracker-${timestamp}.mp3`);
+    showCopyStatus(isPocketTrackerIOS() ? "MP3 ready to share." : "MP3 downloaded.");
   } catch (error) {
     console.error(error);
     showCopyStatus("Could not export MP3.");
+  } finally {
+    exportMp3.disabled = false;
+    exportMp3.textContent = originalLabel;
   }
 }
 
@@ -2585,29 +2374,9 @@ function togglePatternControls() {
   patternTitleToggle.setAttribute("aria-label", label);
   if (patternControls.hidden) {
     rowsMenu.hidden = true;
-    saveMenu.hidden = true;
   }
   renderPattern();
   renderSequencer();
-}
-
-function toggleSaveMenu() {
-  saveMenu.hidden = !saveMenu.hidden;
-  if (!saveMenu.hidden) {
-    rowsMenu.hidden = true;
-  }
-}
-
-async function saveProjectAs(format) {
-  saveMenu.hidden = true;
-
-  if (format === "pt") {
-    await savePocketTrackerProject();
-  } else if (format === "midi") {
-    await saveMidiFile();
-  } else if (format === "mp3") {
-    await exportSongToMp3();
-  }
 }
 
 function renderRowsMenu() {
@@ -2685,23 +2454,15 @@ patternNameButton.addEventListener("click", renameActivePattern);
 patternPrev.addEventListener("click", () => movePatterns(-1));
 patternNext.addEventListener("click", () => movePatterns(1));
 patternCurrentButton.addEventListener("click", togglePatternControls);
-saveProject.addEventListener("click", toggleSaveMenu);
+saveProject.addEventListener("click", savePocketTrackerProject);
 loadProject.addEventListener("click", () => projectFileInput.click());
 projectFileInput.addEventListener("change", () => {
   loadPocketTrackerFile(projectFileInput.files?.[0]);
 });
-saveMenu.addEventListener("click", (event) => {
-  const option = event.target.closest("[data-save-format]");
-  if (!option) return;
-
-  saveProjectAs(option.dataset.saveFormat);
-});
+exportMp3.addEventListener("click", exportSongToMp3);
 rowsSelect.addEventListener("click", () => {
   renderRowsMenu();
   rowsMenu.hidden = !rowsMenu.hidden;
-  if (!rowsMenu.hidden) {
-    saveMenu.hidden = true;
-  }
 });
 rowsMenu.addEventListener("click", (event) => {
   const option = event.target.closest(".rows-option");
