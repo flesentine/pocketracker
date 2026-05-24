@@ -2394,11 +2394,11 @@ function setActiveCellNote(note) {
 function updateActiveCellSample(sample) {
   selectedSample = sample;
   const parsed = parseCell(pattern[activeRow][activeChannel]);
-  if (parsed) {
+  if (isRecording && parsed) {
     pattern[activeRow][activeChannel] = makeCell(parsed.note, sample, selectedVolume);
+    renderPattern();
   }
   syncReadouts();
-  renderPattern();
 }
 
 function selectSample(sample) {
@@ -2941,11 +2941,11 @@ editorNoteGrid.addEventListener("click", (event) => {
 volumeSlider.addEventListener("input", (event) => {
   selectedVolume = Number(event.target.value);
   const parsed = parseCell(pattern[activeRow][activeChannel]);
-  if (parsed) {
+  if (isRecording && parsed) {
     pattern[activeRow][activeChannel] = makeCell(parsed.note, parsed.sample, selectedVolume);
+    renderPattern();
   }
   syncReadouts();
-  renderPattern();
 });
 
 octaveDown.addEventListener("click", () => {
@@ -3142,6 +3142,11 @@ patternGrid.addEventListener("pointercancel", () => {
 copyCancel.addEventListener("click", clearSelectionOnly);
 
 clearCell.addEventListener("click", () => {
+  if (!isRecording) {
+    showCopyStatus("Turn recording on to clear cells.");
+    return;
+  }
+
   pattern[activeRow][activeChannel] = emptyCell;
   syncReadouts();
   renderPattern();
