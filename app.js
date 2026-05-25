@@ -2578,6 +2578,26 @@ function hideTempoPanel() {
   document.body.classList.remove("tempo-open");
 }
 
+function bindImmediateControl(button, action) {
+  let ignoreClick = false;
+
+  button.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    ignoreClick = true;
+    action();
+  });
+
+  button.addEventListener("click", (event) => {
+    if (ignoreClick) {
+      event.preventDefault();
+      ignoreClick = false;
+      return;
+    }
+
+    action();
+  });
+}
+
 function togglePatternControls() {
   patternControls.hidden = !patternControls.hidden;
   const label = patternControls.hidden ? "Open pattern controls" : "Close pattern controls";
@@ -2716,7 +2736,7 @@ patternLoopToggle.addEventListener("click", () => {
 });
 
 channelHeaderButtons.forEach((button) => {
-  button.addEventListener("click", () => {
+  bindImmediateControl(button, () => {
     const channel = Number(button.dataset.channel);
     mutedChannels[channel] = !mutedChannels[channel];
     syncChannelMutes();
@@ -3152,12 +3172,12 @@ clearCell.addEventListener("click", () => {
   renderPattern();
 });
 
-recordButton.addEventListener("click", () => {
+bindImmediateControl(recordButton, () => {
   isRecording = !isRecording;
   syncRecordButton();
 });
 
-metronomeButton.addEventListener("click", () => {
+bindImmediateControl(metronomeButton, () => {
   isMetronomeEnabled = !isMetronomeEnabled;
   syncMetronomeButton();
 });
