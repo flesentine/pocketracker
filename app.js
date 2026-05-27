@@ -61,10 +61,10 @@ const sampleVoices = {
 const projectFileFormat = "pocket-tracker";
 const projectFileVersion = 1;
 const emptyCell = "--- .. ...";
-const defaultPatternRows = 64;
-const minPatternRows = 16;
+const defaultPatternRows = 16;
+const minPatternRows = 8;
 const maxPatternRows = 128;
-const rowStep = 16;
+const rowOptions = [8, 16, 32, 48, 64, 80, 96, 112, 128];
 const maxVisiblePatternRows = 18;
 const minVisiblePatternRows = 8;
 const minPatternRowHeight = 22;
@@ -2632,7 +2632,7 @@ async function saveProjectAs(format) {
 
 function renderRowsMenu() {
   rowsMenu.innerHTML = "";
-  for (let rows = minPatternRows; rows <= maxPatternRows; rows += rowStep) {
+  rowOptions.forEach((rows) => {
     const option = document.createElement("button");
     option.type = "button";
     option.className = `rows-option${rows === pattern.length ? " active" : ""}`;
@@ -2640,7 +2640,7 @@ function renderRowsMenu() {
     option.textContent = rows.toString();
     option.setAttribute("aria-label", `${rows} rows`);
     rowsMenu.append(option);
-  }
+  });
 }
 
 function beginSampleRackDrag(event) {
@@ -2968,15 +2968,15 @@ volumeSlider.addEventListener("input", (event) => {
   syncReadouts();
 });
 
-octaveDown.addEventListener("click", () => {
-  if (transposeSelectedRangeOctave(-1)) return;
+bindImmediateControl(octaveDown, () => {
+  if (isRecording && transposeSelectedRangeOctave(-1)) return;
 
   octave = Math.max(1, octave - 1);
   syncReadouts();
 });
 
-octaveUp.addEventListener("click", () => {
-  if (transposeSelectedRangeOctave(1)) return;
+bindImmediateControl(octaveUp, () => {
+  if (isRecording && transposeSelectedRangeOctave(1)) return;
 
   octave = Math.min(7, octave + 1);
   syncReadouts();
