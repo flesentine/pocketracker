@@ -1583,6 +1583,24 @@ function refreshPendingCopiedBlockFromSelection(bounds) {
   }
 }
 
+function clearSelectedRange() {
+  const bounds = getRangeBounds();
+  if (!bounds || isSelectingRange) return false;
+
+  for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+    for (let channel = bounds.startChannel; channel <= bounds.endChannel; channel += 1) {
+      pattern[row][channel] = emptyCell;
+    }
+  }
+
+  refreshPendingCopiedBlockFromSelection(bounds);
+  anchorPatternViewport();
+  showCopyStatus("Selection cleared. Deselect when done.");
+  syncReadouts();
+  renderPattern();
+  return true;
+}
+
 function transposeSelectedRangeOctave(delta) {
   const bounds = getRangeBounds();
   if (!bounds || isSelectingRange) return false;
@@ -3166,6 +3184,8 @@ clearCell.addEventListener("click", () => {
     showCopyStatus("Turn recording on to clear cells.");
     return;
   }
+
+  if (clearSelectedRange()) return;
 
   pattern[activeRow][activeChannel] = emptyCell;
   syncReadouts();
